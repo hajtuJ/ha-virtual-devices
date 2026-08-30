@@ -10,9 +10,9 @@ been completed and how it was verified.
 - **Updated:** 2026-08-30
 - **Release target:** MVP / `0.1.0`
 - **Overall status:** `IN_PROGRESS`
-- **Checklist progress:** 1 / 104 tasks (1%)
-- **Current stage:** Stage 0 — decisions and implementation baseline
-- **Next milestone:** approved bootstrap decisions and a runnable repository skeleton
+- **Checklist progress:** 33 / 104 tasks (31%)
+- **Current stage:** Stage 4 — pure gate state machine
+- **Next milestone:** deterministic state transitions with complete safety regression tests
 
 ## Status rules
 
@@ -39,10 +39,10 @@ Do not count examples, exit gates, or the final MVP checklist a second time.
 
 | Stage | Scope | Status | Progress | Depends on |
 | --- | --- | --- | ---: | --- |
-| 0 | Decisions and baseline | `IN_PROGRESS` | 1 / 8 | — |
-| 1 | Repository and tooling | `NOT_STARTED` | 0 / 9 | Stage 0 |
-| 2 | HA scaffold and HACS | `NOT_STARTED` | 0 / 8 | Stage 1 |
-| 3 | Domain model | `NOT_STARTED` | 0 / 9 | Stage 2 |
+| 0 | Decisions and baseline | `DONE` | 8 / 8 | — |
+| 1 | Repository and tooling | `DONE` | 9 / 9 | Stage 0 |
+| 2 | HA scaffold and HACS | `IN_PROGRESS` | 7 / 8 | Stage 1 |
+| 3 | Domain model | `DONE` | 9 / 9 | Stage 2 |
 | 4 | State machine | `NOT_STARTED` | 0 / 10 | Stage 3 |
 | 5 | Command model and executor | `NOT_STARTED` | 0 / 10 | Stages 3–4 |
 | 6 | Configuration model and UI | `NOT_STARTED` | 0 / 10 | Stages 3 and 5 |
@@ -53,19 +53,19 @@ Do not count examples, exit gates, or the final MVP checklist a second time.
 
 ## Stage 0 — Decisions and implementation baseline
 
-**Status:** `IN_PROGRESS`
+**Status:** `DONE`
 
 **Goal:** remove compatibility ambiguity before creating runtime code.
 
 - [x] Review the architecture, functional specification, state machine, test plan,
   bootstrap checklist, and repository instructions.
-- [ ] Select and document the minimum supported Home Assistant version.
-- [ ] Verify and document `ConfigEntry` versus parent entry plus Config Subentries.
-- [ ] Verify and document the manifest `integration_type`.
-- [ ] Decide the supported MVP source-action subset.
-- [ ] Decide the Python version and dependency versioning policy.
-- [ ] Decide whether strict type checking is included in the MVP toolchain.
-- [ ] Record the decisions in **Architecture decisions** below and relevant docs.
+- [x] Select and document the minimum supported Home Assistant version.
+- [x] Verify and document `ConfigEntry` versus parent entry plus Config Subentries.
+- [x] Verify and document the manifest `integration_type`.
+- [x] Decide the supported MVP source-action subset.
+- [x] Decide the Python version and dependency versioning policy.
+- [x] Decide whether strict type checking is included in the MVP toolchain.
+- [x] Record the decisions in **Architecture decisions** below and relevant docs.
 
 **Exit gate:** every compatibility-affecting decision is documented with an official
 HA/HACS reference and does not weaken a safety invariant.
@@ -74,68 +74,85 @@ HA/HACS reference and does not weaken a safety invariant.
 
 - 2026-08-30 — project documents and root `AGENTS.md` reviewed while creating this
   tracker.
+- 2026-08-30 — current HA 2026.8 manifest, config-entry, device registry, Python,
+  HACS, and testing conventions verified against the official documentation and
+  upstream repositories.
 
 ## Stage 1 — Repository and tooling
 
-**Status:** `NOT_STARTED`
+**Status:** `DONE`
 
 **Goal:** create a reproducible Python project with fast local feedback.
 
-- [ ] Create the target repository directories.
-- [ ] Add a suitable `.gitignore` and remove accidental platform artifacts.
-- [ ] Add the selected permissive `LICENSE`.
-- [ ] Add `pyproject.toml` with supported Python and project metadata.
-- [ ] Configure Ruff formatting and lint rules.
-- [ ] Configure pytest and async test support.
-- [ ] Add `pytest-homeassistant-custom-component` with compatible versions.
-- [ ] Add `tests/conftest.py` and a passing smoke test.
-- [ ] Document exact environment setup and local validation commands.
+- [x] Create the target repository directories.
+- [x] Add a suitable `.gitignore` and remove accidental platform artifacts.
+- [x] Add the selected permissive `LICENSE`.
+- [x] Add `pyproject.toml` with supported Python and project metadata.
+- [x] Configure Ruff formatting and lint rules.
+- [x] Configure pytest and async test support.
+- [x] Add `pytest-homeassistant-custom-component` with compatible versions.
+- [x] Add `tests/conftest.py` and a passing smoke test.
+- [x] Document exact environment setup and local validation commands.
 
 **Exit gate:** a clean environment can install dependencies and run the configured
 smoke, lint, and formatting checks successfully.
 
-**Evidence:** _none yet._
+**Evidence:**
+
+- 2026-08-30 — `uv lock` and `uv sync --locked` resolved a Python 3.14.2
+  environment with Home Assistant 2026.8.3.
+- 2026-08-30 — Ruff lint/format, mypy, compileall, and pytest passed locally.
 
 ## Stage 2 — Home Assistant scaffold and HACS baseline
 
-**Status:** `NOT_STARTED`
+**Status:** `IN_PROGRESS`
 
 **Goal:** produce a loadable, UI-discoverable custom integration skeleton.
 
-- [ ] Create `custom_components/virtual_devices/__init__.py` and `const.py`.
-- [ ] Create a valid custom-integration `manifest.json` with a version.
-- [ ] Create the initial `config_flow.py` and set `config_flow: true`.
-- [ ] Add `strings.json`, `translations/en.json`, and `translations/pl.json`.
-- [ ] Implement typed per-entry runtime data and entry setup/unload skeletons.
-- [ ] Add `hacs.json` matching current HACS requirements.
-- [ ] Add scaffold/config-flow tests that load the integration without movement.
+- [x] Create `custom_components/virtual_devices/__init__.py` and `const.py`.
+- [x] Create a valid custom-integration `manifest.json` with a version.
+- [x] Create the initial `config_flow.py` and set `config_flow: true`.
+- [x] Add `strings.json`, `translations/en.json`, and `translations/pl.json`.
+- [x] Implement typed per-entry runtime data and entry setup/unload skeletons.
+- [x] Add `hacs.json` matching current HACS requirements.
+- [x] Add scaffold/config-flow tests that load the integration without movement.
 - [ ] Pass applicable hassfest and HACS validation.
 
 **Exit gate:** Home Assistant can load and unload the integration skeleton; the UI
 flow opens; setup, reload, and unload execute no source action.
 
-**Evidence:** _none yet._
+**Evidence:**
+
+- 2026-08-30 — five scaffold/config-flow/lifecycle/translation tests passed on HA
+  2026.8.3; the tests prove two entries receive distinct stable identities.
+- 2026-08-30 — official `ghcr.io/home-assistant/hassfest:latest` reported one
+  integration and zero invalid integrations. HACS Action remains unverified.
 
 ## Stage 3 — Gate domain model
 
-**Status:** `NOT_STARTED`
+**Status:** `DONE`
 
 **Goal:** define typed, serializable concepts without HA service dependencies.
 
-- [ ] Implement gate state, direction, command, and problem enums.
-- [ ] Implement control mode and source-action types.
-- [ ] Implement STOP strategy types.
-- [ ] Implement direction-change strategy types.
-- [ ] Implement repeated-command policies.
-- [ ] Implement immutable state/event/effect models where practical.
-- [ ] Define serializable command sequence and step models.
-- [ ] Encode and validate core state invariants.
-- [ ] Add unit tests for serialization, validation, and invalid combinations.
+- [x] Implement gate state, direction, command, and problem enums.
+- [x] Implement control mode and source-action types.
+- [x] Implement STOP strategy types.
+- [x] Implement direction-change strategy types.
+- [x] Implement repeated-command policies.
+- [x] Implement immutable state/event/effect models where practical.
+- [x] Define serializable command sequence and step models.
+- [x] Encode and validate core state invariants.
+- [x] Add unit tests for serialization, validation, and invalid combinations.
 
 **Exit gate:** domain imports do not require a running HA instance and all defined
 invariants have deterministic unit tests.
 
-**Evidence:** _none yet._
+**Evidence:**
+
+- 2026-08-30 — domain enums, immutable snapshots/events/effects, and command
+  sequences contain no Home Assistant imports.
+- 2026-08-30 — twenty domain tests cover serialization round trips, invalid source
+  combinations, timing validation, immutability, endpoints, and direction memory.
 
 ## Stage 4 — Pure gate state machine
 
@@ -317,11 +334,11 @@ Record decisions that affect compatibility, persistence, or physical behavior.
 
 | ID | Date | Status | Decision | Rationale and evidence |
 | --- | --- | --- | --- | --- |
-| ADR-001 | — | `OPEN` | Minimum supported HA version | Pending verification. |
-| ADR-002 | — | `OPEN` | ConfigEntry/Subentry topology | Pending verification. |
-| ADR-003 | — | `OPEN` | Manifest integration type | `helper` is a candidate; verify before finalizing. |
-| ADR-004 | — | `OPEN` | MVP source-action subset | Pending product/technical decision. |
-| ADR-005 | — | `OPEN` | Python, dependency, and typing policy | Pending tooling bootstrap. |
+| ADR-001 | 2026-08-30 | `ACCEPTED` | Minimum HA is 2026.8.0. | New integration targets the current stable HA generation and its single-entry device ownership model. HACS declares this minimum explicitly. |
+| ADR-002 | 2026-08-30 | `ACCEPTED` | One ConfigEntry per Virtual Gate. | Gates share no account, connection, or hub resource; independent entries give simpler lifecycle, identity, reload, and failure isolation than a synthetic parent with subentries. |
+| ADR-003 | 2026-08-30 | `ACCEPTED` | Manifest uses `integration_type: helper` and `iot_class: calculated`. | The integration composes existing HA entities into a calculated helper entity; this matches current core helper manifests. |
+| ADR-004 | 2026-08-30 | `ACCEPTED` | MVP source actions are switch activation/deactivation and button press. | These cover common relay and momentary-input controllers. The domain action model remains extensible; arbitrary scripts, covers, and custom sequences are deferred. |
+| ADR-005 | 2026-08-30 | `ACCEPTED` | Python 3.14.2+, exact development pins, uv lockfile, Ruff, pytest, and mypy. | HA 2026.8.3 requires Python 3.14.2. Exact test pins reproduce the supported HA patch level; runtime has no third-party dependencies. Strict typing starts with project-owned code. |
 
 ## Active blockers
 
@@ -337,9 +354,17 @@ available. Do not replace failed results; add a later passing entry.
 | Date | Stage | Command / check | Result | Evidence |
 | --- | --- | --- | --- | --- |
 | 2026-08-30 | 0 | Documentation consistency review | PASS | Tracker mapped to the project specifications. |
+| 2026-08-30 | 1–2 | `uv sync --locked` | PASS | Python 3.14.2, HA 2026.8.3, 146 packages installed from the lockfile. |
+| 2026-08-30 | 1–2 | `ruff check .` and `ruff format --check .` | PASS | All checks passed; 18 files formatted. |
+| 2026-08-30 | 1–3 | `mypy custom_components tests` | PASS | Strict typing found no issues in twelve Python source files. |
+| 2026-08-30 | 1–3 | `pytest` | PASS | Twenty-five tests passed. |
+| 2026-08-30 | 2 | HA hassfest container | PASS | One integration; zero invalid integrations. |
 
 ## Progress change log
 
 | Date | Change | Progress |
 | --- | --- | ---: |
 | 2026-08-30 | Created tracker; confirmed existing specification baseline. | 1 / 104 (1%) |
+| 2026-08-30 | Accepted the five bootstrap architecture decisions. | 8 / 104 (7%) |
+| 2026-08-30 | Completed tooling and all locally verifiable scaffold tasks. | 24 / 104 (23%) |
+| 2026-08-30 | Completed the typed, immutable Virtual Gate domain model. | 33 / 104 (31%) |

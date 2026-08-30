@@ -1,0 +1,17 @@
+{
+  "title": "Urządzenia wirtualne",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Utwórz wirtualną bramę",
+        "description": "Utwórz tożsamość wirtualnej bramy. Sterowanie i czujniki zostaną skonfigurowane w późniejszym etapie implementacji.",
+        "data": {
+          "name": "Nazwa"
+        },
+        "data_description": {
+          "name": "Opisowa nazwa, na przykład Brama wjazdowa."
+        }
+      }
+    }
+  }
+}

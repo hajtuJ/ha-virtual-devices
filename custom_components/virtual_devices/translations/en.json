@@ -1,0 +1,17 @@
+{
+  "title": "Virtual Devices",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Create a virtual gate",
+        "description": "Create the identity of a virtual gate. Controls and sensors will be configured in a later development stage.",
+        "data": {
+          "name": "Name"
+        },
+        "data_description": {
+          "name": "A descriptive name, for example Driveway Gate."
+        }
+      }
+    }
+  }
+}

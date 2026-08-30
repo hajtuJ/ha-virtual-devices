@@ -1,0 +1,11 @@
+{
+  "domain": "virtual_devices",
+  "name": "Virtual Devices",
+  "codeowners": ["@hajtuJ"],
+  "config_flow": true,
+  "documentation": "https://github.com/hajtuJ/ha-virtual-devices",
+  "integration_type": "helper",
+  "iot_class": "calculated",
+  "issue_tracker": "https://github.com/hajtuJ/ha-virtual-devices/issues",
+  "version": "0.1.0"
+}
