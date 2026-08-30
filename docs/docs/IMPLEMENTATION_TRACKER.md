@@ -10,9 +10,9 @@ been completed and how it was verified.
 - **Updated:** 2026-08-30
 - **Release target:** MVP / `0.1.0`
 - **Overall status:** `IN_PROGRESS`
-- **Checklist progress:** 63 / 104 tasks (60%)
-- **Current stage:** Stage 7 — controller and Home Assistant entities
-- **Next milestone:** thin HA cover entity backed by a safe gate controller
+- **Checklist progress:** 74 / 104 tasks (71%)
+- **Current stage:** Stage 8 — observation, position, restore, and diagnostics
+- **Next milestone:** event-driven source observation and restart-safe state restore
 
 ## Status rules
 
@@ -46,7 +46,7 @@ Do not count examples, exit gates, or the final MVP checklist a second time.
 | 4 | State machine | `DONE` | 10 / 10 | Stage 3 |
 | 5 | Command model and executor | `DONE` | 10 / 10 | Stages 3–4 |
 | 6 | Configuration model and UI | `DONE` | 10 / 10 | Stages 3 and 5 |
-| 7 | Controller and HA entities | `NOT_STARTED` | 0 / 11 | Stages 4–6 |
+| 7 | Controller and HA entities | `DONE` | 11 / 11 | Stages 4–6 |
 | 8 | Observation, position, restore, diagnostics | `NOT_STARTED` | 0 / 10 | Stage 7 |
 | 9 | Reconfigure, translations, and user docs | `NOT_STARTED` | 0 / 9 | Stages 6–8 |
 | 10 | Hardening, CI, and MVP release | `NOT_STARTED` | 0 / 10 | Stages 1–9 |
@@ -246,26 +246,37 @@ or unsafe combinations are rejected, and all flow strings are translatable.
 
 ## Stage 7 — Controller and Home Assistant entities
 
-**Status:** `NOT_STARTED`
+**Status:** `DONE`
 
 **Goal:** expose the domain safely through HA while keeping adapters thin.
 
-- [ ] Implement `GateController` orchestration and update callbacks.
-- [ ] Implement `VirtualGateCoverEntity` with `CoverDeviceClass.GATE`.
-- [ ] Map cached domain state to cover properties without I/O.
-- [ ] Expose OPEN/CLOSE and dynamic STOP feature flags.
-- [ ] Keep `SET_POSITION` unavailable for the MVP.
-- [ ] Implement stable entity `unique_id` and translated entity naming.
-- [ ] Register one Device Registry device per virtual gate.
-- [ ] Attach every gate entity to the correct device and config entry/subentry.
-- [ ] Model logical state, availability, and active problem separately.
-- [ ] Forward and unload all platforms with current HA APIs.
-- [ ] Add cover, device/entity registry, delegation, and unload tests.
+- [x] Implement `GateController` orchestration and update callbacks.
+- [x] Implement `VirtualGateCoverEntity` with `CoverDeviceClass.GATE`.
+- [x] Map cached domain state to cover properties without I/O.
+- [x] Expose OPEN/CLOSE and dynamic STOP feature flags.
+- [x] Keep `SET_POSITION` unavailable for the MVP.
+- [x] Implement stable entity `unique_id` and translated entity naming.
+- [x] Register one Device Registry device per virtual gate.
+- [x] Attach every gate entity to the correct device and config entry/subentry.
+- [x] Model logical state, availability, and active problem separately.
+- [x] Forward and unload all platforms with current HA APIs.
+- [x] Add cover, device/entity registry, delegation, and unload tests.
 
 **Exit gate:** two gates operate independently in HA tests; supported features are
 truthful; unload removes entities/tasks safely and causes no movement.
 
-**Evidence:** _none yet._
+**Evidence:**
+
+- 2026-08-30 — the entry-owned `GateController` keeps pure transitions separate
+  from physical sequences, commits movement state only after executor success, emits
+  cached update callbacks, and cancels/awaits active execution during unload.
+- 2026-08-30 — the non-polling gate cover exposes only OPEN/CLOSE plus truthful
+  configured STOP, uses stable device/entity identifiers, and maps cached domain
+  state without I/O; two-gate HA tests prove independent service delegation and
+  registry ownership.
+- 2026-08-30 — controller regressions prove unavailable sources cause no action or
+  false movement state, and unloading a 60-second switch pulse deactivates the relay
+  before completion.
 
 ## Stage 8 — Source observation, position, restore, and diagnostics
 
@@ -391,6 +402,8 @@ available. Do not replace failed results; add a later passing entry.
 | 2026-08-30 | 1–6 | `ruff check`, `ruff format --check`, and strict `mypy` | PASS | All twenty Python source/test files pass static validation. |
 | 2026-08-30 | 1–6 | `pytest -q` | PASS | Ninety tests passed, including twenty-seven configuration tests. |
 | 2026-08-30 | 2, 6 | `ghcr.io/home-assistant/hassfest:latest` | PASS | One integration, zero invalid integrations; translations and Config Flow validated. |
+| 2026-08-30 | 1–7 | Ruff, strict mypy, compileall, and `pytest -q` | PASS | All static checks passed; ninety-six tests passed. |
+| 2026-08-30 | 2, 7 | `ghcr.io/home-assistant/hassfest:latest` | PASS | One integration, zero invalid integrations; cover platform and exception translations validated. |
 
 ## Progress change log
 
@@ -403,3 +416,4 @@ available. Do not replace failed results; add a later passing entry.
 | 2026-08-30 | Completed the pure gate state machine and safety regression matrix. | 43 / 104 (41%) |
 | 2026-08-30 | Completed the serialized, cancellation-safe command executor and HA source adapter. | 53 / 104 (50%) |
 | 2026-08-30 | Completed versioned configuration, native UI flow, validation, and translations. | 63 / 104 (60%) |
+| 2026-08-30 | Completed the safe gate controller, cover platform, device ownership, and unload cleanup. | 74 / 104 (71%) |

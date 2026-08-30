@@ -153,5 +153,25 @@
         "stop": "Stop"
       }
     }
+  },
+  "exceptions": {
+    "stop_unsupported": {
+      "message": "STOP is not configured for this gate."
+    },
+    "controller_unloaded": {
+      "message": "The virtual gate is unloading and cannot accept commands."
+    },
+    "source_unavailable": {
+      "message": "A required gate control is unavailable."
+    },
+    "limit_sensor_conflict": {
+      "message": "Both endpoint sensors are active. Movement is blocked."
+    },
+    "obstacle_active": {
+      "message": "Closing is blocked because the obstacle sensor is active."
+    },
+    "direction_unknown": {
+      "message": "The movement direction is unknown, so this STOP strategy cannot be used safely."
+    }
   }
 }

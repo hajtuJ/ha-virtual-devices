@@ -153,5 +153,25 @@
         "stop": "Zatrzymaj"
       }
     }
+  },
+  "exceptions": {
+    "stop_unsupported": {
+      "message": "Funkcja STOP nie jest skonfigurowana dla tej bramy."
+    },
+    "controller_unloaded": {
+      "message": "Wirtualna brama jest wyładowywana i nie może przyjmować poleceń."
+    },
+    "source_unavailable": {
+      "message": "Wymagane sterowanie bramy jest niedostępne."
+    },
+    "limit_sensor_conflict": {
+      "message": "Oba czujniki krańcowe są aktywne. Ruch jest zablokowany."
+    },
+    "obstacle_active": {
+      "message": "Zamykanie jest zablokowane, ponieważ czujnik przeszkody jest aktywny."
+    },
+    "direction_unknown": {
+      "message": "Kierunek ruchu jest nieznany, dlatego tej strategii STOP nie można bezpiecznie użyć."
+    }
   }
 }

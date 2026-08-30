@@ -121,7 +121,8 @@ async def test_full_flow_creates_loads_and_unloads_typed_entry(
 
     entry = result["result"]
     assert entry.state.value == config_entries.ConfigEntryState.LOADED.value
-    assert entry.runtime_data == VirtualDevicesRuntimeData(config=config)
+    assert isinstance(entry.runtime_data, VirtualDevicesRuntimeData)
+    assert entry.runtime_data.config == config
     assert service_calls == []
 
     assert await hass.config_entries.async_unload(entry.entry_id)

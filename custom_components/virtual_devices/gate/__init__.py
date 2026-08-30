@@ -12,6 +12,7 @@ from .command_executor import (
 )
 from .command_models import CommandSequence, CommandStep, CommandStepType, SourceRef
 from .config import CONFIG_VERSION, GateConfig, GateConfigError, GateLimitConfig
+from .controller import GateController, UpdateCallback
 from .models import (
     ControlActionType,
     ControlMode,
@@ -50,6 +51,7 @@ __all__ = [
     "GateCommandExecutor",
     "GateConfig",
     "GateConfigError",
+    "GateController",
     "GateDirection",
     "GateEffect",
     "GateEffectType",
@@ -70,6 +72,7 @@ __all__ = [
     "SourceUnavailableError",
     "StopStrategyType",
     "UnsafeSequenceError",
+    "UpdateCallback",
     "hold_sequence",
     "pulse_sequence",
 ]
