@@ -1,16 +1,156 @@
 {
   "title": "Virtual Devices",
   "config": {
+    "flow_title": "{name}",
     "step": {
       "user": {
         "title": "Create a virtual gate",
-        "description": "Create the identity of a virtual gate. Controls and sensors will be configured in a later development stage.",
+        "description": "Set the gate identity and physical controller layout.",
         "data": {
-          "name": "Name"
+          "name": "Name",
+          "control_mode": "Control mode"
         },
         "data_description": {
-          "name": "A descriptive name, for example Driveway Gate."
+          "name": "A descriptive name, for example Driveway Gate.",
+          "control_mode": "How the physical controller exposes OPEN, CLOSE, and optional STOP controls."
         }
+      },
+      "controls": {
+        "title": "Control sources",
+        "description": "Select the existing switch or button entities that operate this gate.",
+        "data": {
+          "step_source": "Step-by-step control",
+          "open_source": "OPEN control",
+          "close_source": "CLOSE control",
+          "stop_source": "STOP control"
+        },
+        "data_description": {
+          "step_source": "The single control used by a step-by-step controller.",
+          "open_source": "The control that starts opening.",
+          "close_source": "The control that starts closing.",
+          "stop_source": "The dedicated control that stops movement."
+        }
+      },
+      "limits": {
+        "title": "Endpoint and safety sensors",
+        "description": "Endpoint sensors are optional. Their physical state takes precedence over time estimates.",
+        "data": {
+          "open_limit": "OPEN endpoint sensor",
+          "open_limit_active_state": "OPEN sensor active when on",
+          "open_limit_debounce_ms": "OPEN debounce (ms)",
+          "closed_limit": "CLOSED endpoint sensor",
+          "closed_limit_active_state": "CLOSED sensor active when on",
+          "closed_limit_debounce_ms": "CLOSED debounce (ms)",
+          "obstacle_source": "Obstacle sensor"
+        },
+        "data_description": {
+          "open_limit": "Optional binary sensor active at the fully open endpoint.",
+          "open_limit_active_state": "Disable for a normally-closed/inverted sensor.",
+          "open_limit_debounce_ms": "How long the state must remain stable.",
+          "closed_limit": "Optional binary sensor active at the fully closed endpoint.",
+          "closed_limit_active_state": "Disable for a normally-closed/inverted sensor.",
+          "closed_limit_debounce_ms": "How long the state must remain stable.",
+          "obstacle_source": "Optional binary sensor that blocks CLOSE while active."
+        }
+      },
+      "timing": {
+        "title": "Travel timing",
+        "description": "Configure opening and closing independently. A configured endpoint sensor must still confirm arrival.",
+        "data": {
+          "opening_time_ms": "Opening time (ms)",
+          "closing_time_ms": "Closing time (ms)",
+          "opening_margin_ms": "Opening timeout margin (ms)",
+          "closing_margin_ms": "Closing timeout margin (ms)"
+        },
+        "data_description": {
+          "opening_time_ms": "Expected travel time from CLOSED to OPEN.",
+          "closing_time_ms": "Expected travel time from OPEN to CLOSED.",
+          "opening_margin_ms": "Extra time before reporting an opening timeout.",
+          "closing_margin_ms": "Extra time before reporting a closing timeout."
+        }
+      },
+      "advanced": {
+        "title": "Command behavior",
+        "description": "Choose only behavior supported by the physical controller. Safe defaults ignore STOP, reversal, and repeated commands.",
+        "data": {
+          "pulse_duration_ms": "Pulse duration (ms)",
+          "hold_duration_ms": "HOLD duration (ms)",
+          "minimum_command_interval_ms": "Minimum command interval (ms)",
+          "direction_change_delay_ms": "Direction-change delay (ms)",
+          "pulse_interval_ms": "Multi-pulse interval (ms)",
+          "pulse_count": "Multi-pulse count",
+          "stop_strategy": "STOP strategy",
+          "direction_change_strategy": "Direction-change strategy",
+          "repeated_open_policy": "Repeated OPEN policy",
+          "repeated_close_policy": "Repeated CLOSE policy"
+        },
+        "data_description": {
+          "pulse_duration_ms": "Time a switch remains active for a pulse.",
+          "hold_duration_ms": "Time a switch remains active for a bounded HOLD.",
+          "minimum_command_interval_ms": "Minimum time between physical command sequences.",
+          "direction_change_delay_ms": "Wait between stopping and reversing.",
+          "pulse_interval_ms": "Wait between steps in a multi-pulse strategy.",
+          "pulse_count": "Number of pulses in a multi-pulse strategy.",
+          "stop_strategy": "How motion is stopped. Unsupported means STOP is not exposed.",
+          "direction_change_strategy": "How a moving gate reverses direction.",
+          "repeated_open_policy": "Behavior for OPEN while already open or opening.",
+          "repeated_close_policy": "Behavior for CLOSE while already closed or closing."
+        }
+      }
+    },
+    "error": {
+      "required": "This value is required.",
+      "duplicate_control_source": "OPEN, CLOSE, and STOP controls must use different entities.",
+      "duplicate_sensor": "Endpoint and obstacle roles must use different sensors.",
+      "invalid_source_layout": "The selected controls do not match the control mode.",
+      "invalid_binary_sensor": "Select a binary sensor.",
+      "positive": "Enter a value greater than zero.",
+      "non_negative": "Enter zero or a positive value.",
+      "unsupported_version": "This configuration version is not supported.",
+      "custom_sequence_not_supported": "Custom sequences are not supported in the MVP.",
+      "dedicated_stop_required": "Dedicated STOP requires a dedicated STOP control.",
+      "hold_requires_switch": "A HOLD strategy requires switch controls.",
+      "direct_requires_separate_controls": "Direct reversal requires separate OPEN and CLOSE controls.",
+      "reversal_requires_stop": "This reversal strategy requires a configured STOP strategy.",
+      "multi_pulse_requires_multiple": "A multi-pulse strategy requires at least two pulses.",
+      "repeated_stop_requires_stop": "The repeated-command STOP policy requires a configured STOP strategy."
+    },
+    "abort": {
+      "duplicate_gate": "A virtual gate already uses this set of control entities."
+    }
+  },
+  "selector": {
+    "control_mode": {
+      "options": {
+        "single_step": "Single step-by-step control",
+        "separate_open_close": "Separate OPEN and CLOSE",
+        "separate_open_close_stop": "Separate OPEN, CLOSE, and STOP"
+      }
+    },
+    "stop_strategy": {
+      "options": {
+        "dedicated": "Dedicated STOP control",
+        "pulse_same_direction": "Pulse the current direction",
+        "pulse_opposite_direction": "Pulse the opposite direction",
+        "hold_same_direction": "Hold the current direction",
+        "hold_opposite_direction": "Hold the opposite direction",
+        "unsupported": "Unsupported"
+      }
+    },
+    "direction_change_strategy": {
+      "options": {
+        "direct": "Reverse directly",
+        "stop_then_reverse": "Stop, then reverse",
+        "stop_wait_reverse": "Stop, wait, then reverse",
+        "multi_pulse": "Multi-pulse",
+        "unsupported": "Unsupported"
+      }
+    },
+    "repeated_command_policy": {
+      "options": {
+        "ignore": "Ignore",
+        "repeat": "Repeat",
+        "stop": "Stop"
       }
     }
   }

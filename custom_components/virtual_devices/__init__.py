@@ -4,9 +4,8 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_NAME
 
-from .const import CONF_DEVICE_ID
+from .gate import GateConfig
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
@@ -16,8 +15,17 @@ if TYPE_CHECKING:
 class VirtualDevicesRuntimeData:
     """Runtime data for one configured virtual device."""
 
-    device_id: str
-    name: str
+    config: GateConfig
+
+    @property
+    def device_id(self) -> str:
+        """Return the stable device identifier."""
+        return self.config.device_id
+
+    @property
+    def name(self) -> str:
+        """Return the configured gate name."""
+        return self.config.name
 
 
 type VirtualDevicesConfigEntry = ConfigEntry[VirtualDevicesRuntimeData]
@@ -28,8 +36,7 @@ async def async_setup_entry(
 ) -> bool:
     """Set up Virtual Devices from a config entry without physical side effects."""
     entry.runtime_data = VirtualDevicesRuntimeData(
-        device_id=entry.data[CONF_DEVICE_ID],
-        name=entry.data[CONF_NAME],
+        config=GateConfig.from_dict(dict(entry.data))
     )
     return True
 

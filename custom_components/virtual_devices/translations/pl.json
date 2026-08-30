@@ -1,16 +1,156 @@
 {
   "title": "Urządzenia wirtualne",
   "config": {
+    "flow_title": "{name}",
     "step": {
       "user": {
         "title": "Utwórz wirtualną bramę",
-        "description": "Utwórz tożsamość wirtualnej bramy. Sterowanie i czujniki zostaną skonfigurowane w późniejszym etapie implementacji.",
+        "description": "Ustaw tożsamość bramy i układ fizycznego sterownika.",
         "data": {
-          "name": "Nazwa"
+          "name": "Nazwa",
+          "control_mode": "Tryb sterowania"
         },
         "data_description": {
-          "name": "Opisowa nazwa, na przykład Brama wjazdowa."
+          "name": "Opisowa nazwa, na przykład Brama wjazdowa.",
+          "control_mode": "Sposób, w jaki fizyczny sterownik udostępnia OPEN, CLOSE i opcjonalnie STOP."
         }
+      },
+      "controls": {
+        "title": "Źródła sterowania",
+        "description": "Wybierz istniejące encje przełączników lub przycisków sterujące bramą.",
+        "data": {
+          "step_source": "Sterowanie krok po kroku",
+          "open_source": "Sterowanie OPEN",
+          "close_source": "Sterowanie CLOSE",
+          "stop_source": "Sterowanie STOP"
+        },
+        "data_description": {
+          "step_source": "Pojedyncze sterowanie używane przez sterownik krok po kroku.",
+          "open_source": "Sterowanie rozpoczynające otwieranie.",
+          "close_source": "Sterowanie rozpoczynające zamykanie.",
+          "stop_source": "Dedykowane sterowanie zatrzymujące ruch."
+        }
+      },
+      "limits": {
+        "title": "Krańcówki i czujniki bezpieczeństwa",
+        "description": "Krańcówki są opcjonalne. Ich stan fizyczny ma pierwszeństwo przed estymacją czasu.",
+        "data": {
+          "open_limit": "Krańcówka OPEN",
+          "open_limit_active_state": "Krańcówka OPEN aktywna przy stanie on",
+          "open_limit_debounce_ms": "Debounce OPEN (ms)",
+          "closed_limit": "Krańcówka CLOSED",
+          "closed_limit_active_state": "Krańcówka CLOSED aktywna przy stanie on",
+          "closed_limit_debounce_ms": "Debounce CLOSED (ms)",
+          "obstacle_source": "Czujnik przeszkody"
+        },
+        "data_description": {
+          "open_limit": "Opcjonalny binary sensor aktywny przy pełnym otwarciu.",
+          "open_limit_active_state": "Wyłącz dla czujnika normalnie zamkniętego/odwróconego.",
+          "open_limit_debounce_ms": "Czas, przez jaki stan musi pozostać stabilny.",
+          "closed_limit": "Opcjonalny binary sensor aktywny przy pełnym zamknięciu.",
+          "closed_limit_active_state": "Wyłącz dla czujnika normalnie zamkniętego/odwróconego.",
+          "closed_limit_debounce_ms": "Czas, przez jaki stan musi pozostać stabilny.",
+          "obstacle_source": "Opcjonalny binary sensor blokujący CLOSE, gdy jest aktywny."
+        }
+      },
+      "timing": {
+        "title": "Czasy przejazdu",
+        "description": "Skonfiguruj otwieranie i zamykanie niezależnie. Skonfigurowana krańcówka nadal musi potwierdzić osiągnięcie końca.",
+        "data": {
+          "opening_time_ms": "Czas otwierania (ms)",
+          "closing_time_ms": "Czas zamykania (ms)",
+          "opening_margin_ms": "Margines timeoutu otwierania (ms)",
+          "closing_margin_ms": "Margines timeoutu zamykania (ms)"
+        },
+        "data_description": {
+          "opening_time_ms": "Oczekiwany czas przejazdu od CLOSED do OPEN.",
+          "closing_time_ms": "Oczekiwany czas przejazdu od OPEN do CLOSED.",
+          "opening_margin_ms": "Dodatkowy czas przed zgłoszeniem timeoutu otwierania.",
+          "closing_margin_ms": "Dodatkowy czas przed zgłoszeniem timeoutu zamykania."
+        }
+      },
+      "advanced": {
+        "title": "Zachowanie komend",
+        "description": "Wybierz wyłącznie zachowanie obsługiwane przez fizyczny sterownik. Bezpieczne wartości domyślne ignorują STOP, zmianę kierunku i powtórzone komendy.",
+        "data": {
+          "pulse_duration_ms": "Czas impulsu (ms)",
+          "hold_duration_ms": "Czas HOLD (ms)",
+          "minimum_command_interval_ms": "Minimalny odstęp komend (ms)",
+          "direction_change_delay_ms": "Opóźnienie zmiany kierunku (ms)",
+          "pulse_interval_ms": "Odstęp multi-pulse (ms)",
+          "pulse_count": "Liczba impulsów multi-pulse",
+          "stop_strategy": "Strategia STOP",
+          "direction_change_strategy": "Strategia zmiany kierunku",
+          "repeated_open_policy": "Polityka powtórzonego OPEN",
+          "repeated_close_policy": "Polityka powtórzonego CLOSE"
+        },
+        "data_description": {
+          "pulse_duration_ms": "Czas aktywacji przełącznika dla impulsu.",
+          "hold_duration_ms": "Czas aktywacji przełącznika dla ograniczonego HOLD.",
+          "minimum_command_interval_ms": "Minimalny czas pomiędzy fizycznymi sekwencjami komend.",
+          "direction_change_delay_ms": "Oczekiwanie między zatrzymaniem a zmianą kierunku.",
+          "pulse_interval_ms": "Oczekiwanie między krokami strategii multi-pulse.",
+          "pulse_count": "Liczba impulsów strategii multi-pulse.",
+          "stop_strategy": "Sposób zatrzymania ruchu. Nieobsługiwany STOP nie będzie udostępniany.",
+          "direction_change_strategy": "Sposób zmiany kierunku poruszającej się bramy.",
+          "repeated_open_policy": "Zachowanie dla OPEN, gdy brama jest już otwarta lub się otwiera.",
+          "repeated_close_policy": "Zachowanie dla CLOSE, gdy brama jest już zamknięta lub się zamyka."
+        }
+      }
+    },
+    "error": {
+      "required": "Ta wartość jest wymagana.",
+      "duplicate_control_source": "OPEN, CLOSE i STOP muszą używać różnych encji.",
+      "duplicate_sensor": "Krańcówki i czujnik przeszkody muszą używać różnych sensorów.",
+      "invalid_source_layout": "Wybrane sterowanie nie pasuje do trybu sterowania.",
+      "invalid_binary_sensor": "Wybierz binary sensor.",
+      "positive": "Wprowadź wartość większą od zera.",
+      "non_negative": "Wprowadź zero lub wartość dodatnią.",
+      "unsupported_version": "Ta wersja konfiguracji nie jest obsługiwana.",
+      "custom_sequence_not_supported": "Niestandardowe sekwencje nie są obsługiwane w MVP.",
+      "dedicated_stop_required": "Dedykowany STOP wymaga dedykowanego sterowania STOP.",
+      "hold_requires_switch": "Strategia HOLD wymaga sterowania przełącznikami.",
+      "direct_requires_separate_controls": "Bezpośrednia zmiana kierunku wymaga oddzielnych sterowań OPEN i CLOSE.",
+      "reversal_requires_stop": "Ta strategia zmiany kierunku wymaga skonfigurowanej strategii STOP.",
+      "multi_pulse_requires_multiple": "Strategia multi-pulse wymaga co najmniej dwóch impulsów.",
+      "repeated_stop_requires_stop": "Polityka STOP dla powtórzonej komendy wymaga skonfigurowanej strategii STOP."
+    },
+    "abort": {
+      "duplicate_gate": "Wirtualna brama używa już tego zestawu encji sterujących."
+    }
+  },
+  "selector": {
+    "control_mode": {
+      "options": {
+        "single_step": "Pojedyncze sterowanie krok po kroku",
+        "separate_open_close": "Oddzielne OPEN i CLOSE",
+        "separate_open_close_stop": "Oddzielne OPEN, CLOSE i STOP"
+      }
+    },
+    "stop_strategy": {
+      "options": {
+        "dedicated": "Dedykowane sterowanie STOP",
+        "pulse_same_direction": "Impuls w bieżącym kierunku",
+        "pulse_opposite_direction": "Impuls w przeciwnym kierunku",
+        "hold_same_direction": "HOLD w bieżącym kierunku",
+        "hold_opposite_direction": "HOLD w przeciwnym kierunku",
+        "unsupported": "Nieobsługiwane"
+      }
+    },
+    "direction_change_strategy": {
+      "options": {
+        "direct": "Bezpośrednia zmiana kierunku",
+        "stop_then_reverse": "Zatrzymaj, następnie zmień kierunek",
+        "stop_wait_reverse": "Zatrzymaj, odczekaj i zmień kierunek",
+        "multi_pulse": "Multi-pulse",
+        "unsupported": "Nieobsługiwane"
+      }
+    },
+    "repeated_command_policy": {
+      "options": {
+        "ignore": "Ignoruj",
+        "repeat": "Powtórz",
+        "stop": "Zatrzymaj"
       }
     }
   }

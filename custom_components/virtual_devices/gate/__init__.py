@@ -11,6 +11,7 @@ from .command_executor import (
     pulse_sequence,
 )
 from .command_models import CommandSequence, CommandStep, CommandStepType, SourceRef
+from .config import CONFIG_VERSION, GateConfig, GateConfigError, GateLimitConfig
 from .models import (
     ControlActionType,
     ControlMode,
@@ -36,6 +37,7 @@ from .state_machine import (
 )
 
 __all__ = [
+    "CONFIG_VERSION",
     "CommandExecutorConfig",
     "CommandSequence",
     "CommandStep",
@@ -46,12 +48,15 @@ __all__ = [
     "DirectionChangeStrategyType",
     "GateCommand",
     "GateCommandExecutor",
+    "GateConfig",
+    "GateConfigError",
     "GateDirection",
     "GateEffect",
     "GateEffectType",
     "GateEndpoint",
     "GateEvent",
     "GateEventType",
+    "GateLimitConfig",
     "GateProblem",
     "GateSnapshot",
     "GateState",

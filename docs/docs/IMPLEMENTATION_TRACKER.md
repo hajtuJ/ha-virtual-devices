@@ -10,9 +10,9 @@ been completed and how it was verified.
 - **Updated:** 2026-08-30
 - **Release target:** MVP / `0.1.0`
 - **Overall status:** `IN_PROGRESS`
-- **Checklist progress:** 53 / 104 tasks (50%)
-- **Current stage:** Stage 6 — configuration model and native UI
-- **Next milestone:** versioned gate configuration and complete native Config Flow
+- **Checklist progress:** 63 / 104 tasks (60%)
+- **Current stage:** Stage 7 — controller and Home Assistant entities
+- **Next milestone:** thin HA cover entity backed by a safe gate controller
 
 ## Status rules
 
@@ -45,7 +45,7 @@ Do not count examples, exit gates, or the final MVP checklist a second time.
 | 3 | Domain model | `DONE` | 9 / 9 | Stage 2 |
 | 4 | State machine | `DONE` | 10 / 10 | Stage 3 |
 | 5 | Command model and executor | `DONE` | 10 / 10 | Stages 3–4 |
-| 6 | Configuration model and UI | `NOT_STARTED` | 0 / 10 | Stages 3 and 5 |
+| 6 | Configuration model and UI | `DONE` | 10 / 10 | Stages 3 and 5 |
 | 7 | Controller and HA entities | `NOT_STARTED` | 0 / 11 | Stages 4–6 |
 | 8 | Observation, position, restore, diagnostics | `NOT_STARTED` | 0 / 10 | Stage 7 |
 | 9 | Reconfigure, translations, and user docs | `NOT_STARTED` | 0 / 9 | Stages 6–8 |
@@ -214,25 +214,35 @@ source can leave an owned output active or start a known-invalid sequence.
 
 ## Stage 6 — Configuration model and native UI
 
-**Status:** `NOT_STARTED`
+**Status:** `DONE`
 
 **Goal:** configure multiple gates safely through Home Assistant's native UI.
 
-- [ ] Implement a versioned, typed, serializable gate configuration model.
-- [ ] Validate positive durations, margins, debounce, and intervals.
-- [ ] Validate source combinations and mutually exclusive outputs.
-- [ ] Validate limits, active states, and STOP/reversal strategy compatibility.
-- [ ] Implement the basic Config Flow steps and native selectors.
-- [ ] Implement advanced strategy and safety-input steps.
-- [ ] Prevent duplicate virtual gates with stable identities.
-- [ ] Implement the selected ConfigEntry/Subentry topology and lifecycle.
-- [ ] Add complete Config Flow success, error, abort, and duplicate tests.
-- [ ] Verify that configuration and validation never execute physical actions.
+- [x] Implement a versioned, typed, serializable gate configuration model.
+- [x] Validate positive durations, margins, debounce, and intervals.
+- [x] Validate source combinations and mutually exclusive outputs.
+- [x] Validate limits, active states, and STOP/reversal strategy compatibility.
+- [x] Implement the basic Config Flow steps and native selectors.
+- [x] Implement advanced strategy and safety-input steps.
+- [x] Prevent duplicate virtual gates with stable identities.
+- [x] Implement the selected ConfigEntry/Subentry topology and lifecycle.
+- [x] Add complete Config Flow success, error, abort, and duplicate tests.
+- [x] Verify that configuration and validation never execute physical actions.
 
 **Exit gate:** at least two independent valid gates can be configured via UI, invalid
 or unsafe combinations are rejected, and all flow strings are translatable.
 
-**Evidence:** _none yet._
+**Evidence:**
+
+- 2026-08-30 — immutable schema-versioned `GateConfig` is the single persistence
+  boundary for sources, limits, timing, strategies, identity, and safety behavior;
+  its canonical representation is JSON serializable and round-trip tested.
+- 2026-08-30 — the five-step native Config Flow uses translated entity, number,
+  boolean, text, and select selectors; it supports all three controller modes,
+  optional inverted/debounced limits, obstacle input, and advanced strategies.
+- 2026-08-30 — twenty-seven model/flow tests cover three source topologies, timing
+  bounds, unsafe combinations, success, errors, duplicate abort, two independent
+  gates, lifecycle, and zero physical service calls during setup/unload.
 
 ## Stage 7 — Controller and Home Assistant entities
 
@@ -378,6 +388,9 @@ available. Do not replace failed results; add a later passing entry.
 | 2026-08-30 | 1–5 | `pytest -q` | PASS | Sixty-six tests passed. |
 | 2026-08-30 | 2 | GitHub Actions Test + hassfest jobs | PASS | Test run 33319589919 and hassfest job 99279102703 passed on commit `559548d`. |
 | 2026-08-30 | 2 | GitHub Actions HACS job | BLOCKED | Job 99279102520 cannot inspect the private repository through HACS; publication requires public visibility. |
+| 2026-08-30 | 1–6 | `ruff check`, `ruff format --check`, and strict `mypy` | PASS | All twenty Python source/test files pass static validation. |
+| 2026-08-30 | 1–6 | `pytest -q` | PASS | Ninety tests passed, including twenty-seven configuration tests. |
+| 2026-08-30 | 2, 6 | `ghcr.io/home-assistant/hassfest:latest` | PASS | One integration, zero invalid integrations; translations and Config Flow validated. |
 
 ## Progress change log
 
@@ -389,3 +402,4 @@ available. Do not replace failed results; add a later passing entry.
 | 2026-08-30 | Completed the typed, immutable Virtual Gate domain model. | 33 / 104 (31%) |
 | 2026-08-30 | Completed the pure gate state machine and safety regression matrix. | 43 / 104 (41%) |
 | 2026-08-30 | Completed the serialized, cancellation-safe command executor and HA source adapter. | 53 / 104 (50%) |
+| 2026-08-30 | Completed versioned configuration, native UI flow, validation, and translations. | 63 / 104 (60%) |
