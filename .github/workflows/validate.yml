@@ -16,6 +16,8 @@ jobs:
   hassfest:
     runs-on: ubuntu-latest
     steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
       - name: Run hassfest
         uses: home-assistant/actions/hassfest@master
 
@@ -27,3 +29,4 @@ jobs:
         with:
           category: integration
           ignore: brands description topics
+          repository: hajtuJ/ha-virtual-devices
