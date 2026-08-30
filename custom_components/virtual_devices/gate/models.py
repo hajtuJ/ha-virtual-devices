@@ -115,6 +115,9 @@ class GateEffectType(StrEnum):
     """Side effect requested by a pure state transition."""
 
     EXECUTE_COMMAND = "execute_command"
+    EXECUTE_STOP_STRATEGY = "execute_stop_strategy"
+    EXECUTE_DIRECTION_CHANGE_STRATEGY = "execute_direction_change_strategy"
+    EXECUTE_REPEATED_COMMAND_POLICY = "execute_repeated_command_policy"
     START_MOVEMENT_TIMER = "start_movement_timer"
     CANCEL_MOVEMENT_TIMER = "cancel_movement_timer"
     STATE_CHANGED = "state_changed"
@@ -133,14 +136,41 @@ class GateEffect:
 
     type: GateEffectType
     command: GateCommand | None = None
+    strategy: (
+        StopStrategyType | DirectionChangeStrategyType | RepeatedCommandPolicy | None
+    ) = None
 
     def __post_init__(self) -> None:
         """Validate effect payload compatibility."""
-        if self.type is GateEffectType.EXECUTE_COMMAND and self.command is None:
-            msg = "execute-command effect requires a command"
-            raise ValueError(msg)
-        if self.type is not GateEffectType.EXECUTE_COMMAND and self.command is not None:
-            msg = "only execute-command effects may carry a command"
+        expected_strategy_type: type[StrEnum] | None = None
+        expected_command: GateCommand | None = None
+
+        if self.type is GateEffectType.EXECUTE_COMMAND:
+            if self.command is None or self.strategy is not None:
+                msg = "execute-command effect requires only a command"
+                raise ValueError(msg)
+            return
+        if self.type is GateEffectType.EXECUTE_STOP_STRATEGY:
+            expected_strategy_type = StopStrategyType
+            expected_command = GateCommand.STOP
+        elif self.type is GateEffectType.EXECUTE_DIRECTION_CHANGE_STRATEGY:
+            expected_strategy_type = DirectionChangeStrategyType
+        elif self.type is GateEffectType.EXECUTE_REPEATED_COMMAND_POLICY:
+            expected_strategy_type = RepeatedCommandPolicy
+
+        if expected_strategy_type is not None:
+            if self.command is None or not isinstance(
+                self.strategy, expected_strategy_type
+            ):
+                msg = f"{self.type.value} requires a command and matching strategy"
+                raise ValueError(msg)
+            if expected_command is not None and self.command is not expected_command:
+                msg = f"{self.type.value} requires the {expected_command.value} command"
+                raise ValueError(msg)
+            return
+
+        if self.command is not None or self.strategy is not None:
+            msg = "non-command effects cannot carry command payload"
             raise ValueError(msg)
 
 
@@ -154,6 +184,10 @@ class GateSnapshot:
     estimated_position: float | None = None
     problem: GateProblem = GateProblem.NONE
     last_command: GateCommand | None = None
+    open_limit_active: bool = False
+    closed_limit_active: bool = False
+    source_available: bool = True
+    obstacle_active: bool = False
 
     def __post_init__(self) -> None:
         """Enforce state invariants at the domain boundary."""

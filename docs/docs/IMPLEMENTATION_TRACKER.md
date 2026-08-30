@@ -10,9 +10,9 @@ been completed and how it was verified.
 - **Updated:** 2026-08-30
 - **Release target:** MVP / `0.1.0`
 - **Overall status:** `IN_PROGRESS`
-- **Checklist progress:** 33 / 104 tasks (31%)
-- **Current stage:** Stage 4 — pure gate state machine
-- **Next milestone:** deterministic state transitions with complete safety regression tests
+- **Checklist progress:** 53 / 104 tasks (50%)
+- **Current stage:** Stage 6 — configuration model and native UI
+- **Next milestone:** versioned gate configuration and complete native Config Flow
 
 ## Status rules
 
@@ -43,8 +43,8 @@ Do not count examples, exit gates, or the final MVP checklist a second time.
 | 1 | Repository and tooling | `DONE` | 9 / 9 | Stage 0 |
 | 2 | HA scaffold and HACS | `IN_PROGRESS` | 7 / 8 | Stage 1 |
 | 3 | Domain model | `DONE` | 9 / 9 | Stage 2 |
-| 4 | State machine | `NOT_STARTED` | 0 / 10 | Stage 3 |
-| 5 | Command model and executor | `NOT_STARTED` | 0 / 10 | Stages 3–4 |
+| 4 | State machine | `DONE` | 10 / 10 | Stage 3 |
+| 5 | Command model and executor | `DONE` | 10 / 10 | Stages 3–4 |
 | 6 | Configuration model and UI | `NOT_STARTED` | 0 / 10 | Stages 3 and 5 |
 | 7 | Controller and HA entities | `NOT_STARTED` | 0 / 11 | Stages 4–6 |
 | 8 | Observation, position, restore, diagnostics | `NOT_STARTED` | 0 / 10 | Stage 7 |
@@ -156,47 +156,61 @@ invariants have deterministic unit tests.
 
 ## Stage 4 — Pure gate state machine
 
-**Status:** `NOT_STARTED`
+**Status:** `DONE`
 
 **Goal:** implement deterministic transitions before wiring the HA UI.
 
-- [ ] Implement CLOSED/OPEN/OPENING/CLOSING normal transitions.
-- [ ] Implement STOPPED while preserving `last_direction`.
-- [ ] Implement direction reversal through explicit effects/strategies.
-- [ ] Implement repeated-command policies and safe defaults.
-- [ ] Implement 0/1/2 endpoint sensor behavior and active-state inversion inputs.
-- [ ] Implement endpoint precedence and limit-sensor conflict handling.
-- [ ] Implement timeout outcomes with and without endpoint sensors.
-- [ ] Implement inferable external movement and `UNKNOWN_MOVING`.
-- [ ] Implement safe restore transitions without physical effects.
-- [ ] Add the full state-machine and safety regression test matrix.
+- [x] Implement CLOSED/OPEN/OPENING/CLOSING normal transitions.
+- [x] Implement STOPPED while preserving `last_direction`.
+- [x] Implement direction reversal through explicit effects/strategies.
+- [x] Implement repeated-command policies and safe defaults.
+- [x] Implement 0/1/2 endpoint sensor behavior and active-state inversion inputs.
+- [x] Implement endpoint precedence and limit-sensor conflict handling.
+- [x] Implement timeout outcomes with and without endpoint sensors.
+- [x] Implement inferable external movement and `UNKNOWN_MOVING`.
+- [x] Implement safe restore transitions without physical effects.
+- [x] Add the full state-machine and safety regression test matrix.
 
 **Exit gate:** all transitions in `STATE_MACHINE.md` pass pure unit tests, including
 conflicts, restore, timeouts, reversals, and direction memory.
 
-**Evidence:** _none yet._
+**Evidence:**
+
+- 2026-08-30 — pure `GateStateMachine` implements command, endpoint, timeout,
+  conflict, availability, obstacle, external-motion, and restore transitions without
+  importing Home Assistant or performing physical actions.
+- 2026-08-30 — twenty-eight deterministic tests cover normal transitions, every
+  reversal family, repeated policies, inverted limits, conflicts, timeouts,
+  direction memory, external motion, and passive restore.
 
 ## Stage 5 — Command abstraction and serialized executor
 
-**Status:** `NOT_STARTED`
+**Status:** `DONE`
 
 **Goal:** translate state-machine effects into safe physical source actions.
 
-- [ ] Implement activate, deactivate, delay, pulse, HOLD, and sequence semantics.
-- [ ] Implement source adapters for the agreed MVP action subset.
-- [ ] Implement preflight validation of every critical source.
-- [ ] Serialize command execution with an explicit concurrent-command policy.
-- [ ] Enforce minimum command and pulse intervals.
-- [ ] Implement direction-change delays and multi-step strategies.
-- [ ] Guarantee deactivation through cancellation and exception paths.
-- [ ] Prevent simultaneous activation of mutually exclusive OPEN/CLOSE outputs.
-- [ ] Abort partial sequences safely when a critical source becomes unavailable.
-- [ ] Add deterministic executor tests for order, timing, cleanup, and concurrency.
+- [x] Implement activate, deactivate, delay, pulse, HOLD, and sequence semantics.
+- [x] Implement source adapters for the agreed MVP action subset.
+- [x] Implement preflight validation of every critical source.
+- [x] Serialize command execution with an explicit concurrent-command policy.
+- [x] Enforce minimum command and pulse intervals.
+- [x] Implement direction-change delays and multi-step strategies.
+- [x] Guarantee deactivation through cancellation and exception paths.
+- [x] Prevent simultaneous activation of mutually exclusive OPEN/CLOSE outputs.
+- [x] Abort partial sequences safely when a critical source becomes unavailable.
+- [x] Add deterministic executor tests for order, timing, cleanup, and concurrency.
 
 **Exit gate:** tests prove that no cancellation, exception, overlap, or unavailable
 source can leave an owned output active or start a known-invalid sequence.
 
-**Evidence:** _none yet._
+**Evidence:**
+
+- 2026-08-30 — the queue-based executor performs whole-sequence preflight,
+  rechecks availability before each physical action, enforces timing and relay
+  interlocks, and cleans up owned outputs in `finally`.
+- 2026-08-30 — switch and button service adapters use blocking Home Assistant
+  service calls; thirteen executor/adapter tests cover ordering, timing,
+  cancellation, concurrency, unavailable sources, and mutual exclusion.
 
 ## Stage 6 — Configuration model and native UI
 
@@ -344,7 +358,7 @@ Record decisions that affect compatibility, persistence, or physical behavior.
 
 | Since | Stage | Blocker | Owner / next action |
 | --- | --- | --- | --- |
-| — | — | None | — |
+| 2026-08-30 | 2 | HACS Action cannot validate a private repository; HACS publishing requires a public GitHub repository. | Repository owner: make the repository public before HACS/release validation. Implementation may continue independently. |
 
 ## Verification log
 
@@ -359,6 +373,11 @@ available. Do not replace failed results; add a later passing entry.
 | 2026-08-30 | 1–3 | `mypy custom_components tests` | PASS | Strict typing found no issues in twelve Python source files. |
 | 2026-08-30 | 1–3 | `pytest` | PASS | Twenty-five tests passed. |
 | 2026-08-30 | 2 | HA hassfest container | PASS | One integration; zero invalid integrations. |
+| 2026-08-30 | 1–5 | `ruff check custom_components tests` and `ruff format --check custom_components tests` | PASS | All project Python files pass lint and formatting checks. |
+| 2026-08-30 | 3–5 | `mypy custom_components tests/gate` | PASS | Strict typing found no issues in fifteen source files. |
+| 2026-08-30 | 1–5 | `pytest -q` | PASS | Sixty-six tests passed. |
+| 2026-08-30 | 2 | GitHub Actions Test + hassfest jobs | PASS | Test run 33319589919 and hassfest job 99279102703 passed on commit `559548d`. |
+| 2026-08-30 | 2 | GitHub Actions HACS job | BLOCKED | Job 99279102520 cannot inspect the private repository through HACS; publication requires public visibility. |
 
 ## Progress change log
 
@@ -368,3 +387,5 @@ available. Do not replace failed results; add a later passing entry.
 | 2026-08-30 | Accepted the five bootstrap architecture decisions. | 8 / 104 (7%) |
 | 2026-08-30 | Completed tooling and all locally verifiable scaffold tasks. | 24 / 104 (23%) |
 | 2026-08-30 | Completed the typed, immutable Virtual Gate domain model. | 33 / 104 (31%) |
+| 2026-08-30 | Completed the pure gate state machine and safety regression matrix. | 43 / 104 (41%) |
+| 2026-08-30 | Completed the serialized, cancellation-safe command executor and HA source adapter. | 53 / 104 (50%) |

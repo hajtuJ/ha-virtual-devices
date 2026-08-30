@@ -1,5 +1,15 @@
 """Pure domain model for Virtual Gate."""
 
+from .command_executor import (
+    CommandExecutorConfig,
+    ConcurrentCommandPolicy,
+    GateCommandExecutor,
+    SourceActions,
+    SourceUnavailableError,
+    UnsafeSequenceError,
+    hold_sequence,
+    pulse_sequence,
+)
 from .command_models import CommandSequence, CommandStep, CommandStepType, SourceRef
 from .models import (
     ControlActionType,
@@ -18,25 +28,43 @@ from .models import (
     RepeatedCommandPolicy,
     StopStrategyType,
 )
+from .state_machine import (
+    GateEndpoint,
+    GateStateMachine,
+    GateStateMachineConfig,
+    LimitSensorConfig,
+)
 
 __all__ = [
+    "CommandExecutorConfig",
     "CommandSequence",
     "CommandStep",
     "CommandStepType",
+    "ConcurrentCommandPolicy",
     "ControlActionType",
     "ControlMode",
     "DirectionChangeStrategyType",
     "GateCommand",
+    "GateCommandExecutor",
     "GateDirection",
     "GateEffect",
     "GateEffectType",
+    "GateEndpoint",
     "GateEvent",
     "GateEventType",
     "GateProblem",
     "GateSnapshot",
     "GateState",
+    "GateStateMachine",
+    "GateStateMachineConfig",
     "GateTransition",
+    "LimitSensorConfig",
     "RepeatedCommandPolicy",
+    "SourceActions",
     "SourceRef",
+    "SourceUnavailableError",
     "StopStrategyType",
+    "UnsafeSequenceError",
+    "hold_sequence",
+    "pulse_sequence",
 ]

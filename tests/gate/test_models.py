@@ -80,9 +80,9 @@ def test_effect_payload_is_validated() -> None:
     effect = GateEffect(GateEffectType.EXECUTE_COMMAND, GateCommand.OPEN)
     assert effect.command is GateCommand.OPEN
 
-    with pytest.raises(ValueError, match="requires a command"):
+    with pytest.raises(ValueError, match="requires only a command"):
         GateEffect(GateEffectType.EXECUTE_COMMAND)
-    with pytest.raises(ValueError, match="only execute-command"):
+    with pytest.raises(ValueError, match="cannot carry command"):
         GateEffect(GateEffectType.STATE_CHANGED, GateCommand.CLOSE)
 
 
