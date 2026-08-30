@@ -86,6 +86,12 @@ class VirtualGateCoverEntity(CoverEntity):
         """Return cached closing state."""
         return self._controller.snapshot.state is GateState.CLOSING
 
+    @property
+    def current_cover_position(self) -> int | None:
+        """Return the clamped cached estimate without enabling SET_POSITION."""
+        position = self._controller.snapshot.estimated_position
+        return round(position) if position is not None else None
+
     async def async_added_to_hass(self) -> None:
         """Subscribe entity writes to controller updates."""
         self.async_on_remove(

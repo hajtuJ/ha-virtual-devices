@@ -30,6 +30,7 @@ from .models import (
     RepeatedCommandPolicy,
     StopStrategyType,
 )
+from .position import GatePositionEstimator
 from .state_machine import (
     GateEndpoint,
     GateStateMachine,
@@ -59,6 +60,7 @@ __all__ = [
     "GateEvent",
     "GateEventType",
     "GateLimitConfig",
+    "GatePositionEstimator",
     "GateProblem",
     "GateSnapshot",
     "GateState",

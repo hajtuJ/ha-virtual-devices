@@ -3,6 +3,7 @@
 from typing import Final
 
 DOMAIN: Final = "virtual_devices"
+PLATFORMS: Final = ("cover", "sensor", "binary_sensor")
 
 CONF_DEVICE_ID: Final = "device_id"
 CONF_CONFIG_VERSION: Final = "config_version"

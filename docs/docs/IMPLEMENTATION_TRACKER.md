@@ -10,9 +10,9 @@ been completed and how it was verified.
 - **Updated:** 2026-08-30
 - **Release target:** MVP / `0.1.0`
 - **Overall status:** `IN_PROGRESS`
-- **Checklist progress:** 74 / 104 tasks (71%)
-- **Current stage:** Stage 8 — observation, position, restore, and diagnostics
-- **Next milestone:** event-driven source observation and restart-safe state restore
+- **Checklist progress:** 84 / 104 tasks (80%)
+- **Current stage:** Stage 9 — reconfigure, translations, and user documentation
+- **Next milestone:** identity-preserving Reconfigure Flow and complete user guide
 
 ## Status rules
 
@@ -47,7 +47,7 @@ Do not count examples, exit gates, or the final MVP checklist a second time.
 | 5 | Command model and executor | `DONE` | 10 / 10 | Stages 3–4 |
 | 6 | Configuration model and UI | `DONE` | 10 / 10 | Stages 3 and 5 |
 | 7 | Controller and HA entities | `DONE` | 11 / 11 | Stages 4–6 |
-| 8 | Observation, position, restore, diagnostics | `NOT_STARTED` | 0 / 10 | Stage 7 |
+| 8 | Observation, position, restore, diagnostics | `DONE` | 10 / 10 | Stage 7 |
 | 9 | Reconfigure, translations, and user docs | `NOT_STARTED` | 0 / 9 | Stages 6–8 |
 | 10 | Hardening, CI, and MVP release | `NOT_STARTED` | 0 / 10 | Stages 1–9 |
 
@@ -280,25 +280,38 @@ truthful; unload removes entities/tasks safely and causes no movement.
 
 ## Stage 8 — Source observation, position, restore, and diagnostics
 
-**Status:** `NOT_STARTED`
+**Status:** `DONE`
 
 **Goal:** make runtime state accurate, explainable, and restart-safe.
 
-- [ ] Subscribe to source state changes without polling.
-- [ ] Implement configurable endpoint debounce and inversion.
-- [ ] Implement listener/timer registration with guaranteed unload cleanup.
-- [ ] Implement deterministic opening and closing position estimation.
-- [ ] Freeze on STOP and calibrate position at physical endpoints.
-- [ ] Persist safe semantic state and direction memory.
-- [ ] Restore using sensor authority without replaying motion or timers.
-- [ ] Implement detailed-state, last-direction, last-command, and problem entities.
-- [ ] Implement redacted config-entry diagnostics.
-- [ ] Add listener lifecycle, position, restore, diagnostics, and restart tests.
+- [x] Subscribe to source state changes without polling.
+- [x] Implement configurable endpoint debounce and inversion.
+- [x] Implement listener/timer registration with guaranteed unload cleanup.
+- [x] Implement deterministic opening and closing position estimation.
+- [x] Freeze on STOP and calibrate position at physical endpoints.
+- [x] Persist safe semantic state and direction memory.
+- [x] Restore using sensor authority without replaying motion or timers.
+- [x] Implement detailed-state, last-direction, last-command, and problem entities.
+- [x] Implement redacted config-entry diagnostics.
+- [x] Add listener lifecycle, position, restore, diagnostics, and restart tests.
 
 **Exit gate:** physical sensors outrank estimates and restored history; restart/reload
 never moves the gate; no listener, timer, or task leaks remain after unload.
 
-**Evidence:** _none yet._
+**Evidence:**
+
+- 2026-08-30 — `GateSourceObserver` uses indexed HA state-change listeners,
+  configurable stable-state debounce, active-state inversion, and explicit cleanup;
+  control and observation availability remain independent cached values.
+- 2026-08-30 — the injected-clock position estimator covers asymmetric travel,
+  clamping, STOP freeze, and physical endpoint calibration; controller-owned HA
+  timeout/interval callbacks are cancelled on endpoint, STOP, reversal, and unload.
+- 2026-08-30 — versioned private HA storage contains semantic context only. Startup
+  caches debounced physical inputs before one passive RESTORE, so saved movement is
+  never resumed and an inactive initial limit cannot fabricate external movement.
+- 2026-08-30 — translated enum/problem entities and redacted entry diagnostics expose
+  state, direction, command, availability, endpoints, position, and problem without
+  gate names, stable IDs, or source entity IDs.
 
 ## Stage 9 — Reconfigure, translations, and user documentation
 
@@ -404,6 +417,10 @@ available. Do not replace failed results; add a later passing entry.
 | 2026-08-30 | 2, 6 | `ghcr.io/home-assistant/hassfest:latest` | PASS | One integration, zero invalid integrations; translations and Config Flow validated. |
 | 2026-08-30 | 1–7 | Ruff, strict mypy, compileall, and `pytest -q` | PASS | All static checks passed; ninety-six tests passed. |
 | 2026-08-30 | 2, 7 | `ghcr.io/home-assistant/hassfest:latest` | PASS | One integration, zero invalid integrations; cover platform and exception translations validated. |
+| 2026-08-30 | 7 | GitHub Actions Test run 33328492154 | PASS | Ruff, formatting, strict mypy, and all ninety-six tests passed for commit `7a9a0b3`. |
+| 2026-08-30 | 2, 7 | GitHub Actions Validate run 33328492166 | PARTIAL | hassfest job 99302741814 passed; HACS job 99302741944 remained blocked by private-repository file access. |
+| 2026-08-30 | 1–8 | Ruff, strict mypy, compileall, and `pytest -q` | PASS | All static checks passed; 108 tests passed including observer, estimator, persistence, restore, diagnostics, and lifecycle regressions. |
+| 2026-08-30 | 2, 8 | `ghcr.io/home-assistant/hassfest:latest` | PASS | One integration, zero invalid integrations; all three platforms and synchronized translations validated. |
 
 ## Progress change log
 
@@ -417,3 +434,4 @@ available. Do not replace failed results; add a later passing entry.
 | 2026-08-30 | Completed the serialized, cancellation-safe command executor and HA source adapter. | 53 / 104 (50%) |
 | 2026-08-30 | Completed versioned configuration, native UI flow, validation, and translations. | 63 / 104 (60%) |
 | 2026-08-30 | Completed the safe gate controller, cover platform, device ownership, and unload cleanup. | 74 / 104 (71%) |
+| 2026-08-30 | Completed observation, estimation, semantic restore, diagnostic entities, and redacted diagnostics. | 84 / 104 (80%) |

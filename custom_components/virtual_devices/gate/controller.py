@@ -4,9 +4,13 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable
+from dataclasses import replace
+from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
 
+from homeassistant.core import callback
 from homeassistant.exceptions import ServiceValidationError
+from homeassistant.helpers.event import async_call_later, async_track_time_interval
 
 from ..const import DOMAIN
 from .command_executor import (
@@ -27,13 +31,22 @@ from .models import (
     GateEventType,
     GateProblem,
     GateSnapshot,
+    GateState,
     RepeatedCommandPolicy,
     StopStrategyType,
 )
-from .state_machine import GateStateMachine, GateStateMachineConfig, LimitSensorConfig
+from .state_machine import (
+    GateEndpoint,
+    GateStateMachine,
+    GateStateMachineConfig,
+    LimitSensorConfig,
+)
 
 if TYPE_CHECKING:
+    from homeassistant.core import HomeAssistant
+
     from .config import GateConfig
+    from .position import GatePositionEstimator
 
 type UpdateCallback = Callable[[], None]
 
@@ -47,6 +60,8 @@ class GateController:
         actions: SourceActions,
         *,
         initial_snapshot: GateSnapshot | None = None,
+        hass: HomeAssistant | None = None,
+        position_estimator: GatePositionEstimator | None = None,
     ) -> None:
         """Create a passive controller; construction never executes an action."""
         self.config = config
@@ -76,9 +91,22 @@ class GateController:
         )
         self._actions = actions
         self._snapshot = initial_snapshot or GateSnapshot()
+        self._hass = hass
+        if position_estimator is None:
+            from .position import GatePositionEstimator
+
+            position_estimator = GatePositionEstimator(
+                config.opening_time_ms,
+                config.closing_time_ms,
+            )
+        self._position_estimator = position_estimator
+        self._position_estimator.restore(self._snapshot.estimated_position)
+        self._sensor_available = True
         self._callbacks: set[UpdateCallback] = set()
         self._command_lock = asyncio.Lock()
         self._active_execution: asyncio.Task[None] | None = None
+        self._cancel_movement_timeout: Callable[[], None] | None = None
+        self._cancel_position_updates: Callable[[], None] | None = None
         self._shutdown = False
 
     @property
@@ -96,6 +124,11 @@ class GateController:
         """Return whether configured STOP behavior is executable."""
         return self.config.stop_strategy is not StopStrategyType.UNSUPPORTED
 
+    @property
+    def sensor_available(self) -> bool:
+        """Return cached availability of configured observation sensors."""
+        return self._sensor_available
+
     def async_add_update_callback(self, callback: UpdateCallback) -> Callable[[], None]:
         """Register a synchronous cached-state update callback."""
         self._callbacks.add(callback)
@@ -105,14 +138,68 @@ class GateController:
 
         return remove
 
-    async def async_initialize(self) -> None:
-        """Cache source availability without executing a physical action."""
-        available = await self._all_control_sources_available()
-        self._apply_passive_event(
-            GateEventType.SOURCE_AVAILABLE
-            if available
-            else GateEventType.SOURCE_UNAVAILABLE
+    async def async_restore(self) -> None:
+        """Reconcile restored context and physical sensor flags without movement."""
+        async with self._command_lock:
+            transition = self._machine.transition(
+                self._snapshot, GateEvent(GateEventType.RESTORE)
+            )
+            if any(
+                effect.type.value.startswith("execute") for effect in transition.effects
+            ):
+                raise RuntimeError("restore unexpectedly requested physical movement")
+            self._position_estimator.restore(transition.snapshot.estimated_position)
+            self._set_snapshot(transition.snapshot)
+
+    async def async_initialize_observations(
+        self,
+        *,
+        open_limit_active: bool,
+        closed_limit_active: bool,
+        source_available: bool,
+        sensor_available: bool,
+        obstacle_active: bool,
+    ) -> None:
+        """Cache startup observations without transitions, actions, or timers."""
+        async with self._command_lock:
+            self._sensor_available = sensor_available
+            self._set_snapshot(
+                replace(
+                    self._snapshot,
+                    open_limit_active=open_limit_active,
+                    closed_limit_active=closed_limit_active,
+                    source_available=source_available,
+                    obstacle_active=obstacle_active,
+                )
+            )
+
+    async def async_handle_event(self, event: GateEvent) -> None:
+        """Apply an observed source/timer event and its non-command effects."""
+        async with self._command_lock:
+            self._update_position_snapshot()
+            transition = self._machine.transition(self._snapshot, event)
+            if any(
+                effect.type.value.startswith("execute") for effect in transition.effects
+            ):
+                msg = f"observed event requested a physical action: {event.type.value}"
+                raise RuntimeError(msg)
+            self._set_snapshot(transition.snapshot)
+            self._apply_runtime_effects(transition.effects)
+
+    async def async_handle_limit(
+        self, endpoint: GateEndpoint, *, raw_is_on: bool
+    ) -> None:
+        """Normalize one configured endpoint input and apply it passively."""
+        await self.async_handle_event(
+            self._machine.limit_event(endpoint, raw_is_on=raw_is_on)
         )
+
+    def set_sensor_available(self, available: bool) -> None:
+        """Update cached observation availability independently of gate state."""
+        if available == self._sensor_available:
+            return
+        self._sensor_available = available
+        self._notify_callbacks()
 
     async def async_open(self) -> None:
         """Request safe opening."""
@@ -147,6 +234,7 @@ class GateController:
             if command is GateCommand.CLOSE and self._snapshot.obstacle_active:
                 self._raise_rejected("obstacle_active")
 
+            self._update_position_snapshot()
             event_type = {
                 GateCommand.OPEN: GateEventType.COMMAND_OPEN,
                 GateCommand.CLOSE: GateEventType.COMMAND_CLOSE,
@@ -185,6 +273,7 @@ class GateController:
 
             # A failed or cancelled physical effect never leaks a logical transition.
             self._set_snapshot(transition.snapshot)
+            self._apply_runtime_effects(transition.effects)
 
     async def async_shutdown(self) -> None:
         """Cancel and await owned work without initiating any new movement."""
@@ -193,6 +282,7 @@ class GateController:
         if task is not None and not task.done():
             task.cancel()
             await asyncio.gather(task, return_exceptions=True)
+        self._cancel_timers()
         self._callbacks.clear()
 
     async def _all_control_sources_available(self) -> bool:
@@ -217,8 +307,96 @@ class GateController:
         if snapshot == self._snapshot:
             return
         self._snapshot = snapshot
-        for callback in tuple(self._callbacks):
-            callback()
+        self._notify_callbacks()
+
+    def _notify_callbacks(self) -> None:
+        """Notify every entity/persistence subscriber of cached changes."""
+        for update_callback in tuple(self._callbacks):
+            update_callback()
+
+    def _apply_runtime_effects(self, effects: tuple[GateEffect, ...]) -> None:
+        """Start or stop estimator/timers only after a transition is committed."""
+        effect_types = {effect.type for effect in effects}
+        if GateEffectType.CANCEL_MOVEMENT_TIMER in effect_types:
+            self._freeze_position()
+            self._cancel_timers()
+        if GateEffectType.START_MOVEMENT_TIMER in effect_types:
+            self._start_movement_runtime()
+
+    def _start_movement_runtime(self) -> None:
+        """Start one timeout and periodic cached position updates."""
+        self._cancel_timers()
+        direction = self._snapshot.current_direction
+        self._position_estimator.start(direction, self._snapshot.estimated_position)
+        if self._hass is None:
+            return
+        travel_ms = (
+            self.config.opening_time_ms
+            if direction is GateDirection.OPENING
+            else self.config.closing_time_ms
+        )
+        endpoint_configured = (
+            self.config.open_limit is not None
+            if direction is GateDirection.OPENING
+            else self.config.closed_limit is not None
+        )
+        margin_ms = (
+            self.config.opening_margin_ms
+            if direction is GateDirection.OPENING
+            else self.config.closing_margin_ms
+        )
+        timeout_seconds = (travel_ms + (margin_ms if endpoint_configured else 0)) / 1000
+        self._cancel_movement_timeout = async_call_later(
+            self._hass,
+            timeout_seconds,
+            self._async_movement_timeout,
+        )
+        self._cancel_position_updates = async_track_time_interval(
+            self._hass,
+            self._async_position_tick,
+            timedelta(seconds=1),
+            name=f"virtual_gate_position_{self.config.device_id}",
+        )
+
+    async def _async_movement_timeout(self, now: datetime) -> None:
+        """Apply the configured endpoint-aware timeout."""
+        del now
+        self._cancel_movement_timeout = None
+        await self.async_handle_event(GateEvent(GateEventType.MOVEMENT_TIMEOUT))
+
+    async def _async_position_tick(self, now: datetime) -> None:
+        """Publish a deterministic in-memory position estimate."""
+        del now
+        async with self._command_lock:
+            self._update_position_snapshot()
+
+    @callback
+    def _cancel_timers(self) -> None:
+        """Cancel all runtime movement callbacks idempotently."""
+        if self._cancel_movement_timeout is not None:
+            self._cancel_movement_timeout()
+            self._cancel_movement_timeout = None
+        if self._cancel_position_updates is not None:
+            self._cancel_position_updates()
+            self._cancel_position_updates = None
+
+    def _update_position_snapshot(self) -> None:
+        """Cache the estimator's current value while movement is active."""
+        if self._snapshot.state not in (GateState.OPENING, GateState.CLOSING):
+            return
+        position = self._position_estimator.position
+        if position != self._snapshot.estimated_position:
+            self._set_snapshot(replace(self._snapshot, estimated_position=position))
+
+    def _freeze_position(self) -> None:
+        """Freeze estimation without changing endpoint-authoritative values."""
+        if self._snapshot.state in (GateState.OPEN, GateState.CLOSED):
+            position = self._snapshot.estimated_position
+            self._position_estimator.restore(position)
+        else:
+            position = self._position_estimator.freeze()
+        if position != self._snapshot.estimated_position:
+            self._set_snapshot(replace(self._snapshot, estimated_position=position))
 
     def _sequence_for_effects(
         self, effects: tuple[GateEffect, ...], original: GateSnapshot

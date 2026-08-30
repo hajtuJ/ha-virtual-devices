@@ -13,6 +13,9 @@ from custom_components.virtual_devices.gate import (
     GateConfig,
     GateController,
     GateDirection,
+    GateEvent,
+    GateEventType,
+    GatePositionEstimator,
     GateSnapshot,
     GateState,
     SourceRef,
@@ -55,6 +58,16 @@ def button_config(**changes: object) -> GateConfig:
     }
     values.update(changes)
     return GateConfig(**values)  # type: ignore[arg-type]
+
+
+@dataclass
+class FakeClock:
+    """Controllable estimator clock."""
+
+    now: float = 0
+
+    def monotonic(self) -> float:
+        return self.now
 
 
 async def test_controller_commits_state_only_after_successful_action() -> None:
@@ -140,3 +153,33 @@ async def test_configured_same_direction_stop_uses_direction_memory() -> None:
     assert actions.calls == [("press", "button.gate")]
     assert controller.snapshot.state is GateState.STOPPED
     assert controller.snapshot.last_direction is GateDirection.OPENING
+
+
+async def test_controller_estimates_and_freezes_position_on_stop() -> None:
+    config = button_config(
+        opening_time_ms=10_000,
+        closing_time_ms=20_000,
+        stop_strategy=StopStrategyType.PULSE_SAME_DIRECTION,
+    )
+    clock = FakeClock()
+    estimator = GatePositionEstimator(
+        config.opening_time_ms,
+        config.closing_time_ms,
+        monotonic=clock.monotonic,
+    )
+    controller = GateController(
+        config,
+        FakeActions(),
+        initial_snapshot=GateSnapshot(state=GateState.CLOSED, estimated_position=0),
+        position_estimator=estimator,
+    )
+
+    await controller.async_open()
+    clock.now = 5
+    await controller.async_handle_event(GateEvent(GateEventType.MOVEMENT_TIMER_TICK))
+    assert controller.snapshot.estimated_position == pytest.approx(50)
+
+    await controller.async_stop()
+    clock.now = 8
+    assert controller.snapshot.state is GateState.STOPPED
+    assert controller.snapshot.estimated_position == pytest.approx(50)

@@ -154,6 +154,44 @@
       }
     }
   },
+  "entity": {
+    "sensor": {
+      "detailed_state": {
+        "name": "Stan szczegółowy",
+        "state": {
+          "unknown": "Nieznany",
+          "closed": "Zamknięta",
+          "opening": "Otwieranie",
+          "open": "Otwarta",
+          "closing": "Zamykanie",
+          "stopped": "Zatrzymana",
+          "unknown_moving": "Ruch w nieznanym kierunku",
+          "error": "Błąd"
+        }
+      },
+      "last_direction": {
+        "name": "Ostatni kierunek",
+        "state": {
+          "unknown": "Nieznany",
+          "opening": "Otwieranie",
+          "closing": "Zamykanie"
+        }
+      },
+      "last_command": {
+        "name": "Ostatnie polecenie",
+        "state": {
+          "open": "Otwórz",
+          "close": "Zamknij",
+          "stop": "Zatrzymaj"
+        }
+      }
+    },
+    "binary_sensor": {
+      "problem": {
+        "name": "Problem"
+      }
+    }
+  },
   "exceptions": {
     "stop_unsupported": {
       "message": "Funkcja STOP nie jest skonfigurowana dla tej bramy."

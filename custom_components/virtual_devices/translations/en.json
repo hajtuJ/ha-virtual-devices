@@ -154,6 +154,44 @@
       }
     }
   },
+  "entity": {
+    "sensor": {
+      "detailed_state": {
+        "name": "Detailed state",
+        "state": {
+          "unknown": "Unknown",
+          "closed": "Closed",
+          "opening": "Opening",
+          "open": "Open",
+          "closing": "Closing",
+          "stopped": "Stopped",
+          "unknown_moving": "Moving in an unknown direction",
+          "error": "Error"
+        }
+      },
+      "last_direction": {
+        "name": "Last direction",
+        "state": {
+          "unknown": "Unknown",
+          "opening": "Opening",
+          "closing": "Closing"
+        }
+      },
+      "last_command": {
+        "name": "Last command",
+        "state": {
+          "open": "Open",
+          "close": "Close",
+          "stop": "Stop"
+        }
+      }
+    },
+    "binary_sensor": {
+      "problem": {
+        "name": "Problem"
+      }
+    }
+  },
   "exceptions": {
     "stop_unsupported": {
       "message": "STOP is not configured for this gate."
