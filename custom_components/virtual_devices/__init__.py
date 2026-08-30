@@ -90,3 +90,24 @@ async def async_unload_entry(
     await runtime.persistence.async_flush(runtime.controller.snapshot)
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     return unload_ok
+
+
+async def async_migrate_entry(
+    hass: HomeAssistant, entry: VirtualDevicesConfigEntry
+) -> bool:
+    """Normalize older version-1 entries without setup or physical actions."""
+    if entry.version != 1 or entry.minor_version > 2:
+        return False
+    if entry.minor_version == 2:
+        return True
+    try:
+        config = GateConfig.from_dict(dict(entry.data))
+    except KeyError, TypeError, ValueError:
+        return False
+    hass.config_entries.async_update_entry(
+        entry,
+        data=config.to_dict(),
+        version=1,
+        minor_version=2,
+    )
+    return True

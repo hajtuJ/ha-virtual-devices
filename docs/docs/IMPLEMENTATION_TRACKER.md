@@ -10,9 +10,9 @@ been completed and how it was verified.
 - **Updated:** 2026-08-30
 - **Release target:** MVP / `0.1.0`
 - **Overall status:** `IN_PROGRESS`
-- **Checklist progress:** 84 / 104 tasks (80%)
-- **Current stage:** Stage 9 — reconfigure, translations, and user documentation
-- **Next milestone:** identity-preserving Reconfigure Flow and complete user guide
+- **Checklist progress:** 93 / 104 tasks (89%)
+- **Current stage:** Stage 10 — hardening, CI, and MVP release
+- **Next milestone:** complete release audit, simulated manual test, and public HACS validation
 
 ## Status rules
 
@@ -48,7 +48,7 @@ Do not count examples, exit gates, or the final MVP checklist a second time.
 | 6 | Configuration model and UI | `DONE` | 10 / 10 | Stages 3 and 5 |
 | 7 | Controller and HA entities | `DONE` | 11 / 11 | Stages 4–6 |
 | 8 | Observation, position, restore, diagnostics | `DONE` | 10 / 10 | Stage 7 |
-| 9 | Reconfigure, translations, and user docs | `NOT_STARTED` | 0 / 9 | Stages 6–8 |
+| 9 | Reconfigure, translations, and user docs | `DONE` | 9 / 9 | Stages 6–8 |
 | 10 | Hardening, CI, and MVP release | `NOT_STARTED` | 0 / 10 | Stages 1–9 |
 
 ## Stage 0 — Decisions and implementation baseline
@@ -315,24 +315,38 @@ never moves the gate; no listener, timer, or task leaks remain after unload.
 
 ## Stage 9 — Reconfigure, translations, and user documentation
 
-**Status:** `NOT_STARTED`
+**Status:** `DONE`
 
 **Goal:** make configuration maintainable without deleting devices.
 
-- [ ] Implement Reconfigure Flow for required gate setup data.
-- [ ] Implement Options Flow only for genuinely optional preferences, if any.
-- [ ] Preserve config, device, and entity identities across reconfigure and rename.
-- [ ] Replace listeners/timers safely when source configuration changes.
-- [ ] Add and test config-entry migration when the stored schema requires it.
-- [ ] Synchronize complete English and Polish translations.
-- [ ] Document installation, first gate setup, modes, limits, and STOP strategies.
-- [ ] Document safety constraints, known limitations, and troubleshooting.
-- [ ] Add reconfigure, migration, identity, and translation tests/validation.
+- [x] Implement Reconfigure Flow for required gate setup data.
+- [x] Implement Options Flow only for genuinely optional preferences, if any.
+- [x] Preserve config, device, and entity identities across reconfigure and rename.
+- [x] Replace listeners/timers safely when source configuration changes.
+- [x] Add and test config-entry migration when the stored schema requires it.
+- [x] Synchronize complete English and Polish translations.
+- [x] Document installation, first gate setup, modes, limits, and STOP strategies.
+- [x] Document safety constraints, known limitations, and troubleshooting.
+- [x] Add reconfigure, migration, identity, and translation tests/validation.
 
 **Exit gate:** users can change supported settings without duplicate devices, stale
 listeners, movement during reload, or untranslated UI strings.
 
-**Evidence:** _none yet._
+**Evidence:**
+
+- 2026-08-30 — the native multi-step Reconfigure Flow pre-populates every required
+  setting, validates through `GateConfig`, preserves the stable device ID, updates
+  entry data/title, and performs one controlled reload. There are no merely optional
+  MVP preferences, so an Options Flow is intentionally not exposed.
+- 2026-08-30 — HA tests change the name, control source, and endpoint sensor while
+  proving stable config-entry/device/entity identity, zero physical service calls,
+  removal of the old listener, and activation of the new listener.
+- 2026-08-30 — config-entry minor-version migration normalizes canonical data without
+  setting up the integration or calling a source. English/Polish flow, selector,
+  entity, exception, and reconfigure translations have identical validated shapes.
+- 2026-08-30 — the public README now documents HACS/development installation, first
+  setup, all modes/strategies, endpoints, estimation, external movement, restore,
+  diagnostics, reconfigure, safety constraints, limitations, and troubleshooting.
 
 ## Stage 10 — Hardening, CI, and MVP release
 
@@ -421,6 +435,10 @@ available. Do not replace failed results; add a later passing entry.
 | 2026-08-30 | 2, 7 | GitHub Actions Validate run 33328492166 | PARTIAL | hassfest job 99302741814 passed; HACS job 99302741944 remained blocked by private-repository file access. |
 | 2026-08-30 | 1–8 | Ruff, strict mypy, compileall, and `pytest -q` | PASS | All static checks passed; 108 tests passed including observer, estimator, persistence, restore, diagnostics, and lifecycle regressions. |
 | 2026-08-30 | 2, 8 | `ghcr.io/home-assistant/hassfest:latest` | PASS | One integration, zero invalid integrations; all three platforms and synchronized translations validated. |
+| 2026-08-30 | 8 | GitHub Actions Test run 33329113923 | PASS | Ruff, formatting, strict mypy, and all 108 tests passed for commit `8390c35`. |
+| 2026-08-30 | 2, 8 | GitHub Actions Validate run 33329113904 | PARTIAL | hassfest job 99304368133 passed; HACS job 99304368071 remained blocked by private-repository file access. |
+| 2026-08-30 | 1–9 | Ruff, strict mypy, compileall, and `pytest -q` | PASS | All static checks passed; 110 tests passed including reconfigure, identity, listener replacement, migration, and translation structure. |
+| 2026-08-30 | 2, 9 | `ghcr.io/home-assistant/hassfest:latest` | PASS | One integration, zero invalid integrations; Reconfigure Flow and synchronized translations validated. |
 
 ## Progress change log
 
@@ -435,3 +453,4 @@ available. Do not replace failed results; add a later passing entry.
 | 2026-08-30 | Completed versioned configuration, native UI flow, validation, and translations. | 63 / 104 (60%) |
 | 2026-08-30 | Completed the safe gate controller, cover platform, device ownership, and unload cleanup. | 74 / 104 (71%) |
 | 2026-08-30 | Completed observation, estimation, semantic restore, diagnostic entities, and redacted diagnostics. | 84 / 104 (80%) |
+| 2026-08-30 | Completed safe reconfiguration, migration, synchronized translations, and user documentation. | 93 / 104 (89%) |

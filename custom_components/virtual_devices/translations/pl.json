@@ -15,6 +15,18 @@
           "control_mode": "Sposób, w jaki fizyczny sterownik udostępnia OPEN, CLOSE i opcjonalnie STOP."
         }
       },
+      "reconfigure": {
+        "title": "Zmień konfigurację wirtualnej bramy",
+        "description": "Zaktualizuj nazwę bramy i układ fizycznego sterownika. Istniejące identyfikatory urządzenia i encji zostaną zachowane.",
+        "data": {
+          "name": "Nazwa",
+          "control_mode": "Tryb sterowania"
+        },
+        "data_description": {
+          "name": "Opisowa nazwa, na przykład Brama wjazdowa.",
+          "control_mode": "Sposób, w jaki fizyczny sterownik udostępnia sterowanie OTWÓRZ, ZAMKNIJ i opcjonalnie STOP."
+        }
+      },
       "controls": {
         "title": "Źródła sterowania",
         "description": "Wybierz istniejące encje przełączników lub przycisków sterujące bramą.",
@@ -116,7 +128,8 @@
       "repeated_stop_requires_stop": "Polityka STOP dla powtórzonej komendy wymaga skonfigurowanej strategii STOP."
     },
     "abort": {
-      "duplicate_gate": "Wirtualna brama używa już tego zestawu encji sterujących."
+      "duplicate_gate": "Wirtualna brama używa już tego zestawu encji sterujących.",
+      "reconfigure_successful": "Konfiguracja wirtualnej bramy została pomyślnie zmieniona."
     }
   },
   "selector": {

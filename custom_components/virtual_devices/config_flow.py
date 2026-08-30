@@ -110,6 +110,7 @@ class VirtualDevicesConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     MINOR_VERSION = 2
 
     _data: dict[str, Any]
+    _device_id: str | None = None
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -131,18 +132,33 @@ class VirtualDevicesConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         return self.async_show_form(
             step_id="user",
-            data_schema=vol.Schema(
-                {
-                    vol.Required(CONF_NAME): selector.TextSelector(),
-                    vol.Required(
-                        CONF_CONTROL_MODE,
-                        default=ControlMode.SINGLE_STEP.value,
-                    ): _select(
-                        [mode.value for mode in ControlMode],
-                        "control_mode",
-                    ),
-                }
-            ),
+            data_schema=self._identity_schema(),
+            errors=errors,
+        )
+
+    async def async_step_reconfigure(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Start identity-preserving reconfiguration of required gate settings."""
+        entry = self._get_reconfigure_entry()
+        if not hasattr(self, "_data"):
+            config = GateConfig.from_dict(dict(entry.data))
+            self._data = self._flow_data_from_config(config)
+            self._device_id = config.device_id
+
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            name = str(user_input[CONF_NAME]).strip()
+            if not name:
+                errors[CONF_NAME] = "required"
+            else:
+                self._data[CONF_NAME] = name
+                self._data[CONF_CONTROL_MODE] = user_input[CONF_CONTROL_MODE]
+                return await self.async_step_controls()
+
+        return self.async_show_form(
+            step_id="reconfigure",
+            data_schema=self._identity_schema(),
             errors=errors,
         )
 
@@ -156,6 +172,13 @@ class VirtualDevicesConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             if len(entity_ids) != len(set(entity_ids)):
                 errors["base"] = "duplicate_control_source"
             else:
+                for key in (
+                    CONF_STEP_SOURCE,
+                    CONF_OPEN_SOURCE,
+                    CONF_CLOSE_SOURCE,
+                    CONF_STOP_SOURCE,
+                ):
+                    self._data.pop(key, None)
                 self._data.update(user_input)
                 return await self.async_step_limits()
 
@@ -187,6 +210,16 @@ class VirtualDevicesConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             if len(sensor_ids) != len(set(sensor_ids)):
                 errors["base"] = "duplicate_sensor"
             else:
+                for key in (
+                    CONF_OPEN_LIMIT,
+                    CONF_OPEN_LIMIT_ACTIVE_STATE,
+                    CONF_OPEN_LIMIT_DEBOUNCE_MS,
+                    CONF_CLOSED_LIMIT,
+                    CONF_CLOSED_LIMIT_ACTIVE_STATE,
+                    CONF_CLOSED_LIMIT_DEBOUNCE_MS,
+                    CONF_OBSTACLE_SOURCE,
+                ):
+                    self._data.pop(key, None)
                 self._data.update(normalized)
                 return await self.async_step_timing()
 
@@ -194,23 +227,29 @@ class VirtualDevicesConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="limits",
             data_schema=vol.Schema(
                 {
-                    vol.Optional(CONF_OPEN_LIMIT): BINARY_SENSOR_SELECTOR,
+                    self._optional_marker(CONF_OPEN_LIMIT): BINARY_SENSOR_SELECTOR,
                     vol.Required(
-                        CONF_OPEN_LIMIT_ACTIVE_STATE, default=True
+                        CONF_OPEN_LIMIT_ACTIVE_STATE,
+                        default=self._data.get(CONF_OPEN_LIMIT_ACTIVE_STATE, True),
                     ): selector.BooleanSelector(),
                     vol.Required(
                         CONF_OPEN_LIMIT_DEBOUNCE_MS,
-                        default=DEFAULT_DEBOUNCE_MS,
+                        default=self._data.get(
+                            CONF_OPEN_LIMIT_DEBOUNCE_MS, DEFAULT_DEBOUNCE_MS
+                        ),
                     ): _number_selector(minimum=0, maximum=60000),
-                    vol.Optional(CONF_CLOSED_LIMIT): BINARY_SENSOR_SELECTOR,
+                    self._optional_marker(CONF_CLOSED_LIMIT): BINARY_SENSOR_SELECTOR,
                     vol.Required(
-                        CONF_CLOSED_LIMIT_ACTIVE_STATE, default=True
+                        CONF_CLOSED_LIMIT_ACTIVE_STATE,
+                        default=self._data.get(CONF_CLOSED_LIMIT_ACTIVE_STATE, True),
                     ): selector.BooleanSelector(),
                     vol.Required(
                         CONF_CLOSED_LIMIT_DEBOUNCE_MS,
-                        default=DEFAULT_DEBOUNCE_MS,
+                        default=self._data.get(
+                            CONF_CLOSED_LIMIT_DEBOUNCE_MS, DEFAULT_DEBOUNCE_MS
+                        ),
                     ): _number_selector(minimum=0, maximum=60000),
-                    vol.Optional(CONF_OBSTACLE_SOURCE): BINARY_SENSOR_SELECTOR,
+                    self._optional_marker(CONF_OBSTACLE_SOURCE): BINARY_SENSOR_SELECTOR,
                 }
             ),
             errors=errors,
@@ -229,16 +268,28 @@ class VirtualDevicesConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             data_schema=vol.Schema(
                 {
                     vol.Required(
-                        CONF_OPENING_TIME_MS, default=DEFAULT_OPENING_TIME_MS
+                        CONF_OPENING_TIME_MS,
+                        default=self._data.get(
+                            CONF_OPENING_TIME_MS, DEFAULT_OPENING_TIME_MS
+                        ),
                     ): _number_selector(minimum=1, maximum=3600000),
                     vol.Required(
-                        CONF_CLOSING_TIME_MS, default=DEFAULT_CLOSING_TIME_MS
+                        CONF_CLOSING_TIME_MS,
+                        default=self._data.get(
+                            CONF_CLOSING_TIME_MS, DEFAULT_CLOSING_TIME_MS
+                        ),
                     ): _number_selector(minimum=1, maximum=3600000),
                     vol.Required(
-                        CONF_OPENING_MARGIN_MS, default=DEFAULT_MARGIN_MS
+                        CONF_OPENING_MARGIN_MS,
+                        default=self._data.get(
+                            CONF_OPENING_MARGIN_MS, DEFAULT_MARGIN_MS
+                        ),
                     ): _number_selector(minimum=0, maximum=600000),
                     vol.Required(
-                        CONF_CLOSING_MARGIN_MS, default=DEFAULT_MARGIN_MS
+                        CONF_CLOSING_MARGIN_MS,
+                        default=self._data.get(
+                            CONF_CLOSING_MARGIN_MS, DEFAULT_MARGIN_MS
+                        ),
                     ): _number_selector(minimum=0, maximum=600000),
                 }
             ),
@@ -252,18 +303,24 @@ class VirtualDevicesConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             candidate = {**self._data, **user_input}
             try:
-                config = self._build_config(candidate)
+                config = self._build_config(candidate, self._device_id)
             except GateConfigError as err:
                 errors["base"] = err.code
             else:
                 if self._is_duplicate(config):
                     return self.async_abort(reason="duplicate_gate")
-                else:
-                    await self.async_set_unique_id(config.device_id)
-                    return self.async_create_entry(
+                await self.async_set_unique_id(config.device_id)
+                if self.source == config_entries.SOURCE_RECONFIGURE:
+                    self._abort_if_unique_id_mismatch()
+                    return self.async_update_reload_and_abort(
+                        self._get_reconfigure_entry(),
                         title=config.name,
                         data=config.to_dict(),
                     )
+                return self.async_create_entry(
+                    title=config.name,
+                    data=config.to_dict(),
+                )
 
         return self.async_show_form(
             step_id="advanced",
@@ -276,19 +333,18 @@ class VirtualDevicesConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         mode = ControlMode(self._data[CONF_CONTROL_MODE])
         if mode is ControlMode.SINGLE_STEP:
             fields: dict[vol.Marker, Any] = {
-                vol.Required(CONF_STEP_SOURCE): CONTROL_SELECTOR
+                self._required_marker(CONF_STEP_SOURCE): CONTROL_SELECTOR
             }
         else:
             fields = {
-                vol.Required(CONF_OPEN_SOURCE): CONTROL_SELECTOR,
-                vol.Required(CONF_CLOSE_SOURCE): CONTROL_SELECTOR,
+                self._required_marker(CONF_OPEN_SOURCE): CONTROL_SELECTOR,
+                self._required_marker(CONF_CLOSE_SOURCE): CONTROL_SELECTOR,
             }
             if mode is ControlMode.SEPARATE_OPEN_CLOSE_STOP:
-                fields[vol.Required(CONF_STOP_SOURCE)] = CONTROL_SELECTOR
+                fields[self._required_marker(CONF_STOP_SOURCE)] = CONTROL_SELECTOR
         return vol.Schema(fields)
 
-    @staticmethod
-    def _advanced_schema() -> vol.Schema:
+    def _advanced_schema(self) -> vol.Schema:
         """Return the safe strategy subset supported by the MVP UI."""
         stop_strategies = [
             strategy.value
@@ -308,41 +364,67 @@ class VirtualDevicesConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return vol.Schema(
             {
                 vol.Required(
-                    CONF_PULSE_DURATION_MS, default=DEFAULT_PULSE_DURATION_MS
+                    CONF_PULSE_DURATION_MS,
+                    default=self._data.get(
+                        CONF_PULSE_DURATION_MS, DEFAULT_PULSE_DURATION_MS
+                    ),
                 ): _number_selector(minimum=1, maximum=60000),
                 vol.Required(
-                    CONF_HOLD_DURATION_MS, default=DEFAULT_HOLD_DURATION_MS
+                    CONF_HOLD_DURATION_MS,
+                    default=self._data.get(
+                        CONF_HOLD_DURATION_MS, DEFAULT_HOLD_DURATION_MS
+                    ),
                 ): _number_selector(minimum=1, maximum=600000),
                 vol.Required(
                     CONF_MINIMUM_COMMAND_INTERVAL_MS,
-                    default=DEFAULT_COMMAND_INTERVAL_MS,
+                    default=self._data.get(
+                        CONF_MINIMUM_COMMAND_INTERVAL_MS,
+                        DEFAULT_COMMAND_INTERVAL_MS,
+                    ),
                 ): _number_selector(minimum=0, maximum=600000),
                 vol.Required(
                     CONF_DIRECTION_CHANGE_DELAY_MS,
-                    default=DEFAULT_DIRECTION_CHANGE_DELAY_MS,
+                    default=self._data.get(
+                        CONF_DIRECTION_CHANGE_DELAY_MS,
+                        DEFAULT_DIRECTION_CHANGE_DELAY_MS,
+                    ),
                 ): _number_selector(minimum=0, maximum=600000),
                 vol.Required(
                     CONF_PULSE_INTERVAL_MS,
-                    default=DEFAULT_PULSE_INTERVAL_MS,
+                    default=self._data.get(
+                        CONF_PULSE_INTERVAL_MS, DEFAULT_PULSE_INTERVAL_MS
+                    ),
                 ): _number_selector(minimum=0, maximum=600000),
                 vol.Required(
-                    CONF_PULSE_COUNT, default=DEFAULT_PULSE_COUNT
+                    CONF_PULSE_COUNT,
+                    default=self._data.get(CONF_PULSE_COUNT, DEFAULT_PULSE_COUNT),
                 ): _number_selector(minimum=1, maximum=20),
                 vol.Required(
                     CONF_STOP_STRATEGY,
-                    default=StopStrategyType.UNSUPPORTED.value,
+                    default=self._data.get(
+                        CONF_STOP_STRATEGY, StopStrategyType.UNSUPPORTED.value
+                    ),
                 ): _select(stop_strategies, "stop_strategy"),
                 vol.Required(
                     CONF_DIRECTION_CHANGE_STRATEGY,
-                    default=DirectionChangeStrategyType.UNSUPPORTED.value,
+                    default=self._data.get(
+                        CONF_DIRECTION_CHANGE_STRATEGY,
+                        DirectionChangeStrategyType.UNSUPPORTED.value,
+                    ),
                 ): _select(direction_strategies, "direction_change_strategy"),
                 vol.Required(
                     CONF_REPEATED_OPEN_POLICY,
-                    default=RepeatedCommandPolicy.IGNORE.value,
+                    default=self._data.get(
+                        CONF_REPEATED_OPEN_POLICY,
+                        RepeatedCommandPolicy.IGNORE.value,
+                    ),
                 ): _select(repeated_policies, "repeated_command_policy"),
                 vol.Required(
                     CONF_REPEATED_CLOSE_POLICY,
-                    default=RepeatedCommandPolicy.IGNORE.value,
+                    default=self._data.get(
+                        CONF_REPEATED_CLOSE_POLICY,
+                        RepeatedCommandPolicy.IGNORE.value,
+                    ),
                 ): _select(repeated_policies, "repeated_command_policy"),
             }
         )
@@ -376,10 +458,12 @@ class VirtualDevicesConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
     @classmethod
-    def _build_config(cls, data: dict[str, Any]) -> GateConfig:
+    def _build_config(
+        cls, data: dict[str, Any], device_id: str | None = None
+    ) -> GateConfig:
         """Build and comprehensively validate the canonical configuration."""
         return GateConfig(
-            device_id=uuid4().hex,
+            device_id=device_id or uuid4().hex,
             name=str(data[CONF_NAME]),
             control_mode=ControlMode(data[CONF_CONTROL_MODE]),
             step_source=cls._optional_source(data, CONF_STEP_SOURCE),
@@ -424,6 +508,11 @@ class VirtualDevicesConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     def _is_duplicate(self, candidate: GateConfig) -> bool:
         """Reject an accidental second gate owning the same control sources."""
         for entry in self._async_current_entries():
+            if (
+                self.source == config_entries.SOURCE_RECONFIGURE
+                and entry.entry_id == self._get_reconfigure_entry().entry_id
+            ):
+                continue
             try:
                 existing = GateConfig.from_dict(dict(entry.data))
             except GateConfigError, KeyError, TypeError, ValueError:
@@ -431,3 +520,90 @@ class VirtualDevicesConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             if existing.source_signature == candidate.source_signature:
                 return True
         return False
+
+    def _identity_schema(self) -> vol.Schema:
+        """Return identity fields with current values during reconfigure."""
+        name_marker: vol.Marker
+        if hasattr(self, "_data") and CONF_NAME in self._data:
+            name_marker = vol.Required(CONF_NAME, default=self._data[CONF_NAME])
+        else:
+            name_marker = vol.Required(CONF_NAME)
+        return vol.Schema(
+            {
+                name_marker: selector.TextSelector(),
+                vol.Required(
+                    CONF_CONTROL_MODE,
+                    default=self._data.get(
+                        CONF_CONTROL_MODE, ControlMode.SINGLE_STEP.value
+                    )
+                    if hasattr(self, "_data")
+                    else ControlMode.SINGLE_STEP.value,
+                ): _select(
+                    [mode.value for mode in ControlMode],
+                    "control_mode",
+                ),
+            }
+        )
+
+    def _required_marker(self, key: str) -> vol.Marker:
+        """Return a required marker prefilled only when a value exists."""
+        if key in self._data:
+            return vol.Required(key, default=self._data[key])
+        return vol.Required(key)
+
+    def _optional_marker(self, key: str) -> vol.Marker:
+        """Return an optional marker prefilled only when configured."""
+        if key in self._data:
+            return vol.Optional(key, default=self._data[key])
+        return vol.Optional(key)
+
+    @staticmethod
+    def _flow_data_from_config(config: GateConfig) -> dict[str, Any]:
+        """Flatten canonical persisted models into selector form defaults."""
+        data: dict[str, Any] = {
+            CONF_NAME: config.name,
+            CONF_CONTROL_MODE: config.control_mode.value,
+            CONF_OPENING_TIME_MS: config.opening_time_ms,
+            CONF_CLOSING_TIME_MS: config.closing_time_ms,
+            CONF_OPENING_MARGIN_MS: config.opening_margin_ms,
+            CONF_CLOSING_MARGIN_MS: config.closing_margin_ms,
+            CONF_PULSE_DURATION_MS: config.pulse_duration_ms,
+            CONF_HOLD_DURATION_MS: config.hold_duration_ms,
+            CONF_MINIMUM_COMMAND_INTERVAL_MS: config.minimum_command_interval_ms,
+            CONF_DIRECTION_CHANGE_DELAY_MS: config.direction_change_delay_ms,
+            CONF_PULSE_INTERVAL_MS: config.pulse_interval_ms,
+            CONF_PULSE_COUNT: config.pulse_count,
+            CONF_STOP_STRATEGY: config.stop_strategy.value,
+            CONF_DIRECTION_CHANGE_STRATEGY: config.direction_change_strategy.value,
+            CONF_REPEATED_OPEN_POLICY: config.repeated_open_policy.value,
+            CONF_REPEATED_CLOSE_POLICY: config.repeated_close_policy.value,
+        }
+        for key, source in (
+            (CONF_STEP_SOURCE, config.step_source),
+            (CONF_OPEN_SOURCE, config.open_source),
+            (CONF_CLOSE_SOURCE, config.close_source),
+            (CONF_STOP_SOURCE, config.stop_source),
+        ):
+            if source is not None:
+                data[key] = source.entity_id
+        for entity_key, active_key, debounce_key, limit in (
+            (
+                CONF_OPEN_LIMIT,
+                CONF_OPEN_LIMIT_ACTIVE_STATE,
+                CONF_OPEN_LIMIT_DEBOUNCE_MS,
+                config.open_limit,
+            ),
+            (
+                CONF_CLOSED_LIMIT,
+                CONF_CLOSED_LIMIT_ACTIVE_STATE,
+                CONF_CLOSED_LIMIT_DEBOUNCE_MS,
+                config.closed_limit,
+            ),
+        ):
+            if limit is not None:
+                data[entity_key] = limit.entity_id
+                data[active_key] = limit.active_state
+                data[debounce_key] = limit.debounce_ms
+        if config.obstacle_source is not None:
+            data[CONF_OBSTACLE_SOURCE] = config.obstacle_source
+        return data

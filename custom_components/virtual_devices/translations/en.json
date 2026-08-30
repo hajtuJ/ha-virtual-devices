@@ -15,6 +15,18 @@
           "control_mode": "How the physical controller exposes OPEN, CLOSE, and optional STOP controls."
         }
       },
+      "reconfigure": {
+        "title": "Reconfigure virtual gate",
+        "description": "Update the gate identity and physical controller layout. The existing device and entity identities will be preserved.",
+        "data": {
+          "name": "Name",
+          "control_mode": "Control mode"
+        },
+        "data_description": {
+          "name": "A descriptive name, for example Driveway Gate.",
+          "control_mode": "How the physical controller exposes OPEN, CLOSE, and optional STOP controls."
+        }
+      },
       "controls": {
         "title": "Control sources",
         "description": "Select the existing switch or button entities that operate this gate.",
@@ -116,7 +128,8 @@
       "repeated_stop_requires_stop": "The repeated-command STOP policy requires a configured STOP strategy."
     },
     "abort": {
-      "duplicate_gate": "A virtual gate already uses this set of control entities."
+      "duplicate_gate": "A virtual gate already uses this set of control entities.",
+      "reconfigure_successful": "The virtual gate was reconfigured successfully."
     }
   },
   "selector": {
