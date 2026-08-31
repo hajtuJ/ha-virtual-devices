@@ -7,7 +7,7 @@ been completed and how it was verified.
 
 ## Current snapshot
 
-- **Updated:** 2026-08-30
+- **Updated:** 2026-08-31
 - **Release target:** MVP / `0.1.0`
 - **Overall status:** `IN_PROGRESS`
 - **Checklist progress:** 99 / 104 tasks (95%)
@@ -459,6 +459,8 @@ available. Do not replace failed results; add a later passing entry.
 | 2026-08-30 | 1–10 | Ruff, strict mypy, and compileall | PASS | All 48 Python files were formatted; Ruff and strict typing reported no issues. |
 | 2026-08-30 | 2, 10 | `ghcr.io/home-assistant/hassfest:latest` | PASS | One integration, zero invalid integrations; structure and translations validated. |
 | 2026-08-30 | 10 | Disposable simulated Home Assistant 2026.8.3 startup and onboarding | PARTIAL | HA and simulated entities loaded; browser loopback policy blocked the post-restart Virtual Devices UI flow. |
+| 2026-08-31 | 10 | GitHub Actions Test run 33386698170 | PASS | Ruff, formatting, strict mypy, and all 116 tests passed for commit `bc84b0f`. |
+| 2026-08-31 | 2, 10 | GitHub Actions Validate run 33386698197 | PARTIAL | hassfest job 99470823810 passed; HACS job 99470823983 could not read manifests from the confirmed private repository. |
 
 ## Progress change log
 
