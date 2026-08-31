@@ -10,9 +10,9 @@ been completed and how it was verified.
 - **Updated:** 2026-08-30
 - **Release target:** MVP / `0.1.0`
 - **Overall status:** `IN_PROGRESS`
-- **Checklist progress:** 93 / 104 tasks (89%)
+- **Checklist progress:** 99 / 104 tasks (95%)
 - **Current stage:** Stage 10 — hardening, CI, and MVP release
-- **Next milestone:** complete release audit, simulated manual test, and public HACS validation
+- **Next milestone:** complete manual simulated/hardware tests and public HACS validation
 
 ## Status rules
 
@@ -49,7 +49,7 @@ Do not count examples, exit gates, or the final MVP checklist a second time.
 | 7 | Controller and HA entities | `DONE` | 11 / 11 | Stages 4–6 |
 | 8 | Observation, position, restore, diagnostics | `DONE` | 10 / 10 | Stage 7 |
 | 9 | Reconfigure, translations, and user docs | `DONE` | 9 / 9 | Stages 6–8 |
-| 10 | Hardening, CI, and MVP release | `NOT_STARTED` | 0 / 10 | Stages 1–9 |
+| 10 | Hardening, CI, and MVP release | `IN_PROGRESS` | 6 / 10 | Stages 1–9 |
 
 ## Stage 0 — Decisions and implementation baseline
 
@@ -350,25 +350,37 @@ listeners, movement during reload, or untranslated UI strings.
 
 ## Stage 10 — Hardening, CI, and MVP release
 
-**Status:** `NOT_STARTED`
+**Status:** `IN_PROGRESS`
 
 **Goal:** prove the complete MVP is safe, reproducible, and releasable through HACS.
 
-- [ ] Run and pass the complete test suite.
-- [ ] Run and pass Ruff formatting and lint checks.
-- [ ] Run and pass translation and structure validation.
+- [x] Run and pass the complete test suite.
+- [x] Run and pass Ruff formatting and lint checks.
+- [x] Run and pass translation and structure validation.
 - [ ] Run and pass HACS validation and applicable hassfest checks.
-- [ ] Add CI workflows for tests, lint, HACS, and structure validation.
-- [ ] Verify all safety regressions listed in `TEST_PLAN.md`.
+- [x] Add CI workflows for tests, lint, HACS, and structure validation.
+- [x] Verify all safety regressions listed in `TEST_PLAN.md`.
 - [ ] Perform a documented manual test on a non-moving/simulated HA setup first.
 - [ ] Perform a documented controlled hardware test with physical safety systems.
-- [ ] Finalize changelog/release notes and semantic version `0.1.0`.
+- [x] Finalize changelog/release notes and semantic version `0.1.0`.
 - [ ] Tag and publish the HACS-compatible MVP release.
 
 **Exit gate:** CI is green from a clean checkout, all MVP acceptance criteria pass,
 and release evidence is linked below.
 
-**Evidence:** _none yet._
+**Evidence:**
+
+- 2026-08-30 — all 116 tests pass, including explicit controller reversal
+  sequences, real HA timeout callbacks with and without endpoint confirmation, and
+  obstacle rejection with zero source actions.
+- 2026-08-30 — Ruff lint/format, strict mypy, compileall, and official hassfest all
+  pass; hassfest reports one integration and zero invalid integrations.
+- 2026-08-30 — CI workflows cover tests, static checks, hassfest, and HACS. Test and
+  hassfest jobs are green through Stage 9; HACS remains externally blocked while
+  the repository is private.
+- 2026-08-30 — `CHANGELOG.md` and the release test record define the 0.1.0 feature,
+  safety, manual test, hardware test, and publication gates. The simulated HA server
+  started, but browser loopback policy prevented completing the native UI exercise.
 
 ## MVP acceptance checklist
 
@@ -376,18 +388,18 @@ This section is a release gate and is not included in the 104-task progress coun
 Every item must be supported by completed stage tasks and test evidence.
 
 - [ ] Installable as a HACS custom integration.
-- [ ] Configurable entirely from native HA UI.
-- [ ] At least two independent gates coexist.
-- [ ] OPEN/CLOSE work and STOP support is truthful and dynamic.
-- [ ] Zero, one, or two inverted/debounced endpoint sensors work.
-- [ ] Direction remains known after STOP where evidence exists.
-- [ ] Independent travel times/margins and estimated position work.
-- [ ] External movement is detected when inferable.
-- [ ] Endpoint timeouts and limit conflicts report faults safely.
-- [ ] Required unavailable sources reject commands before partial execution.
-- [ ] Pulse/HOLD cancellation and unload cannot leave outputs active.
-- [ ] Startup, restore, reload, migration, and reconfigure cause no movement.
-- [ ] Stable device/entity identities survive restart and reconfigure.
+- [x] Configurable entirely from native HA UI.
+- [x] At least two independent gates coexist.
+- [x] OPEN/CLOSE work and STOP support is truthful and dynamic.
+- [x] Zero, one, or two inverted/debounced endpoint sensors work.
+- [x] Direction remains known after STOP where evidence exists.
+- [x] Independent travel times/margins and estimated position work.
+- [x] External movement is detected when inferable.
+- [x] Endpoint timeouts and limit conflicts report faults safely.
+- [x] Required unavailable sources reject commands before partial execution.
+- [x] Pulse/HOLD cancellation and unload cannot leave outputs active.
+- [x] Startup, restore, reload, migration, and reconfigure cause no movement.
+- [x] Stable device/entity identities survive restart and reconfigure.
 - [ ] English and Polish UI, diagnostics, user docs, tests, and CI are complete.
 
 ## Architecture decisions
@@ -407,6 +419,8 @@ Record decisions that affect compatibility, persistence, or physical behavior.
 | Since | Stage | Blocker | Owner / next action |
 | --- | --- | --- | --- |
 | 2026-08-30 | 2 | HACS Action cannot validate a private repository; HACS publishing requires a public GitHub repository. | Repository owner: make the repository public before HACS/release validation. Implementation may continue independently. |
+| 2026-08-30 | 10 | Codex in-app browser policy blocks loopback navigation after the simulated HA restart, so the native UI exercise is incomplete. | Repository owner: repeat `RELEASE_TEST_RECORD.md` simulated procedure in a browser that permits `127.0.0.1`, or provide an accessible test HA instance. |
+| 2026-08-30 | 10 | Controlled physical hardware validation requires a gate test environment and certified safety systems. | Repository owner: schedule and record the controlled hardware procedure before tagging 0.1.0. |
 
 ## Verification log
 
@@ -439,6 +453,12 @@ available. Do not replace failed results; add a later passing entry.
 | 2026-08-30 | 2, 8 | GitHub Actions Validate run 33329113904 | PARTIAL | hassfest job 99304368133 passed; HACS job 99304368071 remained blocked by private-repository file access. |
 | 2026-08-30 | 1–9 | Ruff, strict mypy, compileall, and `pytest -q` | PASS | All static checks passed; 110 tests passed including reconfigure, identity, listener replacement, migration, and translation structure. |
 | 2026-08-30 | 2, 9 | `ghcr.io/home-assistant/hassfest:latest` | PASS | One integration, zero invalid integrations; Reconfigure Flow and synchronized translations validated. |
+| 2026-08-30 | 9 | GitHub Actions Test run 33329466016 | PASS | Ruff, formatting, strict mypy, and all 110 tests passed for commit `53631bd`. |
+| 2026-08-30 | 2, 9 | GitHub Actions Validate run 33329466107 | PARTIAL | hassfest job 99305319897 passed; HACS job 99305320146 remained blocked by private-repository file access. |
+| 2026-08-30 | 1–10 | `pytest -q` | PASS | All 116 tests passed on Python 3.14.2 and Home Assistant 2026.8.3. |
+| 2026-08-30 | 1–10 | Ruff, strict mypy, and compileall | PASS | All 48 Python files were formatted; Ruff and strict typing reported no issues. |
+| 2026-08-30 | 2, 10 | `ghcr.io/home-assistant/hassfest:latest` | PASS | One integration, zero invalid integrations; structure and translations validated. |
+| 2026-08-30 | 10 | Disposable simulated Home Assistant 2026.8.3 startup and onboarding | PARTIAL | HA and simulated entities loaded; browser loopback policy blocked the post-restart Virtual Devices UI flow. |
 
 ## Progress change log
 
@@ -454,3 +474,4 @@ available. Do not replace failed results; add a later passing entry.
 | 2026-08-30 | Completed the safe gate controller, cover platform, device ownership, and unload cleanup. | 74 / 104 (71%) |
 | 2026-08-30 | Completed observation, estimation, semantic restore, diagnostic entities, and redacted diagnostics. | 84 / 104 (80%) |
 | 2026-08-30 | Completed safe reconfiguration, migration, synchronized translations, and user documentation. | 93 / 104 (89%) |
+| 2026-08-30 | Completed automated release hardening, CI coverage, safety audit, and 0.1.0 release notes. | 99 / 104 (95%) |

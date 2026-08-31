@@ -240,3 +240,67 @@ async def test_control_and_sensor_availability_are_tracked_separately(
     await hass.async_block_till_done()
     assert not controller.control_available
     assert controller.snapshot.problem is GateProblem.SOURCE_UNAVAILABLE
+
+
+@pytest.mark.parametrize("with_open_limit", [False, True])
+async def test_runtime_timeout_requires_configured_endpoint_confirmation(
+    hass: HomeAssistant,
+    with_open_limit: bool,
+) -> None:
+    """Real HA timer completes only unobserved endpoints and faults observed ones."""
+    hass.services.async_register("button", "press", lambda call: None)
+    hass.states.async_set("button.timer_gate", STATE_OFF)
+    if with_open_limit:
+        hass.states.async_set("binary_sensor.timer_open", STATE_OFF)
+    config = GateConfig(
+        device_id=f"timer-{with_open_limit}",
+        name=f"Timer Gate {with_open_limit}",
+        control_mode=ControlMode.SINGLE_STEP,
+        step_source=SourceRef("button.timer_gate", ControlActionType.BUTTON),
+        open_limit=GateLimitConfig("binary_sensor.timer_open", debounce_ms=0)
+        if with_open_limit
+        else None,
+        opening_time_ms=10,
+        opening_margin_ms=10,
+        minimum_command_interval_ms=0,
+    )
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title=config.name,
+        unique_id=config.device_id,
+        data=config.to_dict(),
+    )
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await entry.runtime_data.controller.async_open()
+    await asyncio.sleep(0.04)
+
+    snapshot = entry.runtime_data.controller.snapshot
+    if with_open_limit:
+        assert snapshot.state is GateState.ERROR
+        assert snapshot.problem is GateProblem.OPENING_TIMEOUT
+    else:
+        assert snapshot.state is GateState.OPEN
+        assert snapshot.estimated_position == 100
+
+
+async def test_active_obstacle_blocks_close_without_physical_action(
+    hass: HomeAssistant,
+) -> None:
+    calls: list[ServiceCall] = []
+
+    async def record(call: ServiceCall) -> None:
+        calls.append(call)
+
+    hass.services.async_register("button", "press", record)
+    hass.states.async_set("binary_sensor.gate_open", STATE_ON)
+    hass.states.async_set("binary_sensor.gate_closed", STATE_OFF)
+    hass.states.async_set("binary_sensor.gate_obstacle", STATE_ON)
+    entry = await setup_observed_gate(hass, observed_config())
+    controller = entry.runtime_data.controller
+    assert controller.snapshot.state is GateState.OPEN
+    assert controller.snapshot.problem is GateProblem.OBSTACLE
+
+    with pytest.raises(ServiceValidationError):
+        await controller.async_close()
+    assert calls == []

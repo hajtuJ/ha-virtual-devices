@@ -9,6 +9,7 @@ import pytest
 from custom_components.virtual_devices.gate import (
     ControlActionType,
     ControlMode,
+    DirectionChangeStrategyType,
     GateCommand,
     GateConfig,
     GateController,
@@ -183,3 +184,54 @@ async def test_controller_estimates_and_freezes_position_on_stop() -> None:
     clock.now = 8
     assert controller.snapshot.state is GateState.STOPPED
     assert controller.snapshot.estimated_position == pytest.approx(50)
+
+
+@pytest.mark.parametrize(
+    ("strategy", "pulse_count", "expected_presses"),
+    [
+        (DirectionChangeStrategyType.DIRECT, 2, 1),
+        (DirectionChangeStrategyType.STOP_WAIT_REVERSE, 2, 2),
+        (DirectionChangeStrategyType.MULTI_PULSE, 3, 3),
+    ],
+)
+async def test_controller_executes_configured_reversal_sequence(
+    strategy: DirectionChangeStrategyType,
+    pulse_count: int,
+    expected_presses: int,
+) -> None:
+    """Controller translation preserves explicit reversal strategy semantics."""
+    if strategy is DirectionChangeStrategyType.DIRECT:
+        config = GateConfig(
+            device_id="gate-id",
+            name="Gate",
+            control_mode=ControlMode.SEPARATE_OPEN_CLOSE,
+            open_source=SourceRef("button.gate_open", ControlActionType.BUTTON),
+            close_source=SourceRef("button.gate_close", ControlActionType.BUTTON),
+            direction_change_strategy=strategy,
+            minimum_command_interval_ms=0,
+        )
+    else:
+        config = button_config(
+            stop_strategy=StopStrategyType.PULSE_SAME_DIRECTION,
+            direction_change_strategy=strategy,
+            direction_change_delay_ms=1,
+            pulse_interval_ms=1,
+            pulse_count=pulse_count,
+        )
+    actions = FakeActions()
+    controller = GateController(
+        config,
+        actions,
+        initial_snapshot=GateSnapshot(
+            state=GateState.OPENING,
+            current_direction=GateDirection.OPENING,
+            last_direction=GateDirection.OPENING,
+            estimated_position=40,
+        ),
+    )
+
+    await controller.async_close()
+
+    assert controller.snapshot.state is GateState.CLOSING
+    assert len(actions.calls) == expected_presses
+    assert all(action == "press" for action, _entity_id in actions.calls)
