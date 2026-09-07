@@ -373,6 +373,44 @@ async def test_asymmetric_flow_requires_closed_limit_and_hides_generic_strategie
     assert config.direction_change_strategy is DirectionChangeStrategyType.UNSUPPORTED
 
 
+async def test_symmetric_flow_uses_fixed_profile_with_optional_limits(
+    hass: HomeAssistant,
+) -> None:
+    """The symmetric profile exposes timing, not unsafe generic strategy choices."""
+    result = await advance_to_advanced(
+        hass,
+        name="Symmetric Gate",
+        mode=ControlMode.SYMMETRIC_SINGLE_STEP,
+        controls={CONF_STEP_SOURCE: "button.symmetric_gate"},
+        limits={
+            CONF_CLOSED_LIMIT: "binary_sensor.symmetric_closed",
+            CONF_CLOSED_LIMIT_ACTIVE_STATE: STATE_ON,
+            CONF_CLOSED_LIMIT_DEBOUNCE_MS: 0,
+            CONF_OPEN_LIMIT: "binary_sensor.symmetric_open",
+            CONF_OPEN_LIMIT_ACTIVE_STATE: STATE_ON,
+            CONF_OPEN_LIMIT_DEBOUNCE_MS: 0,
+        },
+    )
+    assert result["data_schema"] is not None
+    schema_keys = {str(key.schema) for key in result["data_schema"].schema}
+    assert schema_keys == {
+        CONF_PULSE_DURATION_MS,
+        CONF_MINIMUM_COMMAND_INTERVAL_MS,
+        CONF_PULSE_INTERVAL_MS,
+    }
+
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    config = GateConfig.from_dict(dict(result["data"]))
+    assert config.control_mode is ControlMode.SYMMETRIC_SINGLE_STEP
+    assert config.open_limit is not None
+    assert config.closed_limit is not None
+    assert config.pulse_count == 3
+    assert config.stop_strategy is StopStrategyType.UNSUPPORTED
+    assert config.direction_change_strategy is DirectionChangeStrategyType.UNSUPPORTED
+
+
 async def test_asymmetric_flow_accepts_closed_and_open_limits(
     hass: HomeAssistant,
 ) -> None:

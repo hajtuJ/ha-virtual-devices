@@ -128,6 +128,8 @@ class GateController:
         """Return whether configured STOP behavior is executable."""
         if self.config.control_mode is ControlMode.ASYMMETRIC_SINGLE_STEP:
             return self._snapshot.state is GateState.OPENING
+        if self.config.control_mode is ControlMode.SYMMETRIC_SINGLE_STEP:
+            return self._snapshot.state in (GateState.OPENING, GateState.CLOSING)
         return self.config.stop_strategy is not StopStrategyType.UNSUPPORTED
 
     @property
@@ -244,7 +246,7 @@ class GateController:
                 self._raise_rejected("limit_sensor_conflict")
             if command is GateCommand.CLOSE and self._snapshot.obstacle_active:
                 self._raise_rejected("obstacle_active")
-            self._validate_asymmetric_command(command)
+            self._validate_fixed_step_command(command)
 
             self._update_position_snapshot()
             event_type = {
@@ -278,7 +280,7 @@ class GateController:
             try:
                 await task
             except SourceUnavailableError as err:
-                if self._asymmetric_action_is_uncertain(err.physical_action_started):
+                if self._fixed_step_action_is_uncertain(err.physical_action_started):
                     self._mark_execution_uncertain(
                         GateProblem.SOURCE_UNAVAILABLE, command
                     )
@@ -286,13 +288,13 @@ class GateController:
                     self._apply_passive_event(GateEventType.SOURCE_UNAVAILABLE)
                 self._raise_rejected("source_unavailable")
             except CommandSequenceCancelledError as err:
-                if self._asymmetric_action_is_uncertain(err.physical_action_started):
+                if self._fixed_step_action_is_uncertain(err.physical_action_started):
                     self._mark_execution_uncertain(
                         GateProblem.COMMAND_SEQUENCE_FAILED, command
                     )
                 raise
             except CommandSequenceError as err:
-                if self._asymmetric_action_is_uncertain(err.physical_action_started):
+                if self._fixed_step_action_is_uncertain(err.physical_action_started):
                     self._mark_execution_uncertain(
                         GateProblem.COMMAND_SEQUENCE_FAILED, command
                     )
@@ -322,15 +324,24 @@ class GateController:
                 return False
         return True
 
-    def _validate_asymmetric_command(self, command: GateCommand) -> None:
-        """Reject asymmetric commands whose physical result cannot be predicted."""
-        if self.config.control_mode is not ControlMode.ASYMMETRIC_SINGLE_STEP:
+    def _validate_fixed_step_command(self, command: GateCommand) -> None:
+        """Reject fixed-profile commands whose physical result is unpredictable."""
+        if self.config.control_mode not in (
+            ControlMode.SYMMETRIC_SINGLE_STEP,
+            ControlMode.ASYMMETRIC_SINGLE_STEP,
+        ):
             return
         snapshot = self._snapshot
         if command is GateCommand.STOP:
-            if snapshot.state is GateState.CLOSING:
+            if (
+                self.config.control_mode is ControlMode.ASYMMETRIC_SINGLE_STEP
+                and snapshot.state is GateState.CLOSING
+            ):
                 self._raise_rejected("stop_unavailable_while_closing")
-            if snapshot.state is not GateState.OPENING:
+            if snapshot.state not in (
+                GateState.OPENING,
+                GateState.CLOSING,
+            ):
                 self._raise_rejected("stop_unsupported")
             return
         if snapshot.state in (
@@ -339,20 +350,35 @@ class GateController:
             GateState.ERROR,
         ) or (
             snapshot.state is GateState.STOPPED
-            and snapshot.last_direction is not GateDirection.OPENING
+            and (
+                snapshot.last_direction is GateDirection.UNKNOWN
+                or (
+                    self.config.control_mode is ControlMode.ASYMMETRIC_SINGLE_STEP
+                    and snapshot.last_direction is not GateDirection.OPENING
+                )
+            )
         ):
-            self._raise_rejected("asymmetric_state_unknown")
+            error = (
+                "asymmetric_state_unknown"
+                if self.config.control_mode is ControlMode.ASYMMETRIC_SINGLE_STEP
+                else "symmetric_state_unknown"
+            )
+            self._raise_rejected(error)
 
-    def _asymmetric_action_is_uncertain(self, action_started: bool) -> bool:
+    def _fixed_step_action_is_uncertain(self, action_started: bool) -> bool:
         return (
             action_started
-            and self.config.control_mode is ControlMode.ASYMMETRIC_SINGLE_STEP
+            and self.config.control_mode
+            in (
+                ControlMode.SYMMETRIC_SINGLE_STEP,
+                ControlMode.ASYMMETRIC_SINGLE_STEP,
+            )
         )
 
     def _mark_execution_uncertain(
         self, problem: GateProblem, command: GateCommand
     ) -> None:
-        """Freeze runtime after a partially attempted asymmetric pulse sequence."""
+        """Freeze runtime after a partially attempted fixed-profile sequence."""
         self._freeze_position()
         self._cancel_timers()
         self._set_snapshot(
@@ -498,7 +524,7 @@ class GateController:
         if effect.type is GateEffectType.EXECUTE_STEP_PULSES:
             if effect.pulse_count is None:
                 raise RuntimeError("step pulse effect has no pulse count")
-            return self._asymmetric_pulse_steps(effect.pulse_count)
+            return self._step_pulse_steps(effect.pulse_count)
         if effect.type is GateEffectType.EXECUTE_STOP_STRATEGY:
             return self._stop_steps(original)
         if effect.type is GateEffectType.EXECUTE_DIRECTION_CHANGE_STRATEGY:
@@ -515,11 +541,11 @@ class GateController:
         source = self._source_for_command(command)
         return self._source_steps(source, self.config.pulse_duration_ms)
 
-    def _asymmetric_pulse_steps(self, pulse_count: int) -> tuple[CommandStep, ...]:
-        """Build the fixed one-source pulse series for the asymmetric profile."""
+    def _step_pulse_steps(self, pulse_count: int) -> tuple[CommandStep, ...]:
+        """Build a fixed-profile one-source pulse series."""
         source = self.config.step_source
         if source is None:
-            raise RuntimeError("asymmetric step profile has no source")
+            raise RuntimeError("fixed step profile has no source")
         pulse = self._source_steps(source, self.config.pulse_duration_ms)
         steps: list[CommandStep] = []
         for index in range(pulse_count):

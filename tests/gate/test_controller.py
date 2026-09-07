@@ -93,6 +93,26 @@ def asymmetric_config(
     return GateConfig(**values)  # type: ignore[arg-type]
 
 
+def symmetric_config(
+    action_type: ControlActionType = ControlActionType.BUTTON,
+    **changes: object,
+) -> GateConfig:
+    """Return the fixed symmetric single-source profile."""
+    entity_id = f"{action_type.value}.gate"
+    values: dict[str, object] = {
+        "device_id": "symmetric-gate-id",
+        "name": "Symmetric Gate",
+        "control_mode": ControlMode.SYMMETRIC_SINGLE_STEP,
+        "step_source": SourceRef(entity_id, action_type),
+        "pulse_duration_ms": 1,
+        "pulse_interval_ms": 1,
+        "pulse_count": 3,
+        "minimum_command_interval_ms": 0,
+    }
+    values.update(changes)
+    return GateConfig(**values)  # type: ignore[arg-type]
+
+
 @dataclass
 class FakeClock:
     """Controllable estimator clock."""
@@ -267,6 +287,169 @@ async def test_controller_executes_configured_reversal_sequence(
     assert controller.snapshot.state is GateState.CLOSING
     assert len(actions.calls) == expected_presses
     assert all(action == "press" for action, _entity_id in actions.calls)
+
+
+@pytest.mark.parametrize(
+    ("initial", "command", "expected_presses", "expected_state"),
+    [
+        (
+            GateSnapshot(state=GateState.CLOSED, estimated_position=0),
+            GateCommand.OPEN,
+            1,
+            GateState.OPENING,
+        ),
+        (
+            GateSnapshot(state=GateState.OPEN, estimated_position=100),
+            GateCommand.CLOSE,
+            1,
+            GateState.CLOSING,
+        ),
+        (
+            GateSnapshot(
+                state=GateState.OPENING,
+                current_direction=GateDirection.OPENING,
+                last_direction=GateDirection.OPENING,
+            ),
+            GateCommand.CLOSE,
+            2,
+            GateState.CLOSING,
+        ),
+        (
+            GateSnapshot(
+                state=GateState.CLOSING,
+                current_direction=GateDirection.CLOSING,
+                last_direction=GateDirection.CLOSING,
+            ),
+            GateCommand.OPEN,
+            2,
+            GateState.OPENING,
+        ),
+        (
+            GateSnapshot(
+                state=GateState.STOPPED,
+                last_direction=GateDirection.OPENING,
+            ),
+            GateCommand.CLOSE,
+            1,
+            GateState.CLOSING,
+        ),
+        (
+            GateSnapshot(
+                state=GateState.STOPPED,
+                last_direction=GateDirection.OPENING,
+            ),
+            GateCommand.OPEN,
+            3,
+            GateState.OPENING,
+        ),
+        (
+            GateSnapshot(
+                state=GateState.STOPPED,
+                last_direction=GateDirection.CLOSING,
+            ),
+            GateCommand.OPEN,
+            1,
+            GateState.OPENING,
+        ),
+        (
+            GateSnapshot(
+                state=GateState.STOPPED,
+                last_direction=GateDirection.CLOSING,
+            ),
+            GateCommand.CLOSE,
+            3,
+            GateState.CLOSING,
+        ),
+    ],
+)
+async def test_symmetric_button_profile_executes_one_command_sequence(
+    initial: GateSnapshot,
+    command: GateCommand,
+    expected_presses: int,
+    expected_state: GateState,
+) -> None:
+    """A single semantic command emits the full 1/2/3-pulse physical sequence."""
+    actions = FakeActions()
+    controller = GateController(
+        symmetric_config(pulse_interval_ms=0),
+        actions,
+        initial_snapshot=initial,
+    )
+
+    await controller.async_command(command)
+
+    assert actions.calls == [("press", "button.gate")] * expected_presses
+    assert controller.snapshot.state is expected_state
+
+
+@pytest.mark.parametrize(
+    ("state", "direction"),
+    [
+        (GateState.OPENING, GateDirection.OPENING),
+        (GateState.CLOSING, GateDirection.CLOSING),
+    ],
+)
+async def test_symmetric_stop_executes_one_pulse_in_both_directions(
+    state: GateState, direction: GateDirection
+) -> None:
+    actions = FakeActions()
+    controller = GateController(
+        symmetric_config(),
+        actions,
+        initial_snapshot=GateSnapshot(
+            state=state,
+            current_direction=direction,
+            last_direction=direction,
+        ),
+    )
+
+    await controller.async_stop()
+
+    assert actions.calls == [("press", "button.gate")]
+    assert controller.snapshot.state is GateState.STOPPED
+    assert controller.snapshot.last_direction is direction
+
+
+async def test_symmetric_switch_triple_pulse_is_ordered_and_deactivated() -> None:
+    actions = FakeActions()
+    controller = GateController(
+        symmetric_config(ControlActionType.SWITCH, pulse_interval_ms=0),
+        actions,
+        initial_snapshot=GateSnapshot(
+            state=GateState.STOPPED,
+            last_direction=GateDirection.OPENING,
+        ),
+    )
+
+    await controller.async_open()
+
+    assert actions.calls == [
+        (action, "switch.gate")
+        for _ in range(3)
+        for action in ("activate", "deactivate")
+    ]
+    assert controller.snapshot.state is GateState.OPENING
+
+
+async def test_symmetric_partial_sequence_failure_becomes_unknown() -> None:
+    actions = FakeActions(fail_press_number=2)
+    controller = GateController(
+        symmetric_config(pulse_interval_ms=0),
+        actions,
+        initial_snapshot=GateSnapshot(
+            state=GateState.CLOSING,
+            current_direction=GateDirection.CLOSING,
+            last_direction=GateDirection.CLOSING,
+        ),
+    )
+
+    with pytest.raises(ServiceValidationError):
+        await controller.async_open()
+
+    assert actions.calls == [("press", "button.gate")] * 2
+    assert controller.snapshot.state is GateState.UNKNOWN
+    assert controller.snapshot.current_direction is GateDirection.UNKNOWN
+    assert controller.snapshot.problem is GateProblem.COMMAND_SEQUENCE_FAILED
 
 
 @pytest.mark.parametrize(

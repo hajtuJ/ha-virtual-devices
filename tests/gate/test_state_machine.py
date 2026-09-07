@@ -75,6 +75,13 @@ def asymmetric_machine(*, open_limit: bool = False) -> GateStateMachine:
     )
 
 
+def symmetric_machine() -> GateStateMachine:
+    """Create the fixed symmetric OPEN-STOP-CLOSE-STOP profile."""
+    return GateStateMachine(
+        GateStateMachineConfig(control_mode=ControlMode.SYMMETRIC_SINGLE_STEP)
+    )
+
+
 @pytest.mark.parametrize(
     ("initial", "event_type", "expected_state", "pulse_count"),
     [
@@ -193,6 +200,142 @@ def test_asymmetric_unknown_phase_never_emits_a_physical_effect(
 ) -> None:
     """An unpredictable controller phase cannot be recovered by guessing."""
     result = asymmetric_machine().transition(
+        snapshot, GateEvent(GateEventType.COMMAND_OPEN)
+    )
+    assert result.snapshot == snapshot
+    assert result.effects == ()
+
+
+@pytest.mark.parametrize(
+    ("initial", "event_type", "expected_state", "pulse_count"),
+    [
+        (
+            GateSnapshot(state=GateState.CLOSED, estimated_position=0),
+            GateEventType.COMMAND_OPEN,
+            GateState.OPENING,
+            1,
+        ),
+        (
+            GateSnapshot(state=GateState.OPEN, estimated_position=100),
+            GateEventType.COMMAND_CLOSE,
+            GateState.CLOSING,
+            1,
+        ),
+        (
+            GateSnapshot(
+                state=GateState.OPENING,
+                current_direction=GateDirection.OPENING,
+                last_direction=GateDirection.OPENING,
+            ),
+            GateEventType.COMMAND_CLOSE,
+            GateState.CLOSING,
+            2,
+        ),
+        (
+            GateSnapshot(
+                state=GateState.CLOSING,
+                current_direction=GateDirection.CLOSING,
+                last_direction=GateDirection.CLOSING,
+            ),
+            GateEventType.COMMAND_OPEN,
+            GateState.OPENING,
+            2,
+        ),
+        (
+            GateSnapshot(
+                state=GateState.STOPPED,
+                last_direction=GateDirection.OPENING,
+            ),
+            GateEventType.COMMAND_CLOSE,
+            GateState.CLOSING,
+            1,
+        ),
+        (
+            GateSnapshot(
+                state=GateState.STOPPED,
+                last_direction=GateDirection.OPENING,
+            ),
+            GateEventType.COMMAND_OPEN,
+            GateState.OPENING,
+            3,
+        ),
+        (
+            GateSnapshot(
+                state=GateState.STOPPED,
+                last_direction=GateDirection.CLOSING,
+            ),
+            GateEventType.COMMAND_OPEN,
+            GateState.OPENING,
+            1,
+        ),
+        (
+            GateSnapshot(
+                state=GateState.STOPPED,
+                last_direction=GateDirection.CLOSING,
+            ),
+            GateEventType.COMMAND_CLOSE,
+            GateState.CLOSING,
+            3,
+        ),
+    ],
+)
+def test_symmetric_profile_emits_exact_directional_pulse_counts(
+    initial: GateSnapshot,
+    event_type: GateEventType,
+    expected_state: GateState,
+    pulse_count: int,
+) -> None:
+    """Each semantic command follows the predictable symmetric physical cycle."""
+    result = symmetric_machine().transition(initial, GateEvent(event_type))
+
+    assert result.snapshot.state is expected_state
+    assert result.effects[0].type is GateEffectType.EXECUTE_STEP_PULSES
+    assert result.effects[0].pulse_count == pulse_count
+
+
+@pytest.mark.parametrize(
+    ("state", "direction"),
+    [
+        (GateState.OPENING, GateDirection.OPENING),
+        (GateState.CLOSING, GateDirection.CLOSING),
+    ],
+)
+def test_symmetric_stop_uses_one_pulse_in_both_directions(
+    state: GateState, direction: GateDirection
+) -> None:
+    """STOP is physically available while opening and while closing."""
+    moving = GateSnapshot(
+        state=state,
+        current_direction=direction,
+        last_direction=direction,
+        estimated_position=45,
+    )
+
+    result = symmetric_machine().transition(
+        moving, GateEvent(GateEventType.COMMAND_STOP)
+    )
+
+    assert result.snapshot.state is GateState.STOPPED
+    assert result.snapshot.last_direction is direction
+    assert result.snapshot.estimated_position == 45
+    assert result.effects[0].type is GateEffectType.EXECUTE_STEP_PULSES
+    assert result.effects[0].pulse_count == 1
+
+
+@pytest.mark.parametrize(
+    "snapshot",
+    [
+        GateSnapshot(),
+        GateSnapshot(state=GateState.UNKNOWN_MOVING),
+        GateSnapshot(state=GateState.ERROR),
+        GateSnapshot(state=GateState.STOPPED),
+    ],
+)
+def test_symmetric_unknown_phase_never_emits_a_physical_effect(
+    snapshot: GateSnapshot,
+) -> None:
+    """The fixed profile does not guess a pulse count without direction memory."""
+    result = symmetric_machine().transition(
         snapshot, GateEvent(GateEventType.COMMAND_OPEN)
     )
     assert result.snapshot == snapshot

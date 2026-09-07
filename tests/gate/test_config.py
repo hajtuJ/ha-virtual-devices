@@ -64,6 +64,13 @@ def test_configuration_round_trip_is_json_safe_and_versioned() -> None:
             {"step_source": source("button.gate")},
         ),
         (
+            ControlMode.SYMMETRIC_SINGLE_STEP,
+            {
+                "step_source": source("button.gate"),
+                "pulse_count": 3,
+            },
+        ),
+        (
             ControlMode.SEPARATE_OPEN_CLOSE,
             {
                 "open_source": source("switch.gate_open"),
@@ -112,6 +119,28 @@ def test_asymmetric_single_step_requires_closed_limit_and_fixed_profile() -> Non
 
     with pytest.raises(GateConfigError, match="asymmetric_profile_is_fixed"):
         replace(config, repeated_open_policy=RepeatedCommandPolicy.REPEAT)
+
+
+def test_symmetric_single_step_has_fixed_profile_and_optional_limits() -> None:
+    """The symmetric cycle fixes its strategies while accepting 0/1/2 limits."""
+    config = single_step_config(
+        control_mode=ControlMode.SYMMETRIC_SINGLE_STEP,
+        pulse_count=3,
+    )
+    assert config.open_limit is None
+    assert config.closed_limit is None
+
+    with_both_limits = replace(
+        config,
+        open_limit=GateLimitConfig("binary_sensor.gate_open"),
+        closed_limit=GateLimitConfig("binary_sensor.gate_closed"),
+    )
+    assert GateConfig.from_dict(with_both_limits.to_dict()) == with_both_limits
+
+    with pytest.raises(GateConfigError, match="symmetric_profile_is_fixed"):
+        replace(config, pulse_count=2)
+    with pytest.raises(GateConfigError, match="symmetric_profile_is_fixed"):
+        replace(config, repeated_close_policy=RepeatedCommandPolicy.REPEAT)
 
 
 def test_control_mode_rejects_missing_and_extra_sources() -> None:

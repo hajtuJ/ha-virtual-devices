@@ -49,6 +49,7 @@ class ControlMode(StrEnum):
     """Physical controller layout used by a virtual gate."""
 
     SINGLE_STEP = "single_step"
+    SYMMETRIC_SINGLE_STEP = "symmetric_single_step"
     ASYMMETRIC_SINGLE_STEP = "asymmetric_single_step"
     SEPARATE_OPEN_CLOSE = "separate_open_close"
     SEPARATE_OPEN_CLOSE_STOP = "separate_open_close_stop"

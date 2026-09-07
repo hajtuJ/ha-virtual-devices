@@ -353,6 +353,7 @@ class VirtualDevicesConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         mode = ControlMode(self._data[CONF_CONTROL_MODE])
         if mode in (
             ControlMode.SINGLE_STEP,
+            ControlMode.SYMMETRIC_SINGLE_STEP,
             ControlMode.ASYMMETRIC_SINGLE_STEP,
         ):
             fields: dict[vol.Marker, Any] = {
@@ -390,9 +391,9 @@ class VirtualDevicesConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 ),
             ): _number_selector(minimum=0, maximum=600000),
         }
-        if (
-            ControlMode(self._data[CONF_CONTROL_MODE])
-            is ControlMode.ASYMMETRIC_SINGLE_STEP
+        if ControlMode(self._data[CONF_CONTROL_MODE]) in (
+            ControlMode.SYMMETRIC_SINGLE_STEP,
+            ControlMode.ASYMMETRIC_SINGLE_STEP,
         ):
             return vol.Schema(common_fields)
 
@@ -506,6 +507,8 @@ class VirtualDevicesConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Build and comprehensively validate the canonical configuration."""
         mode = ControlMode(data[CONF_CONTROL_MODE])
         asymmetric = mode is ControlMode.ASYMMETRIC_SINGLE_STEP
+        symmetric = mode is ControlMode.SYMMETRIC_SINGLE_STEP
+        fixed_profile = asymmetric or symmetric
         return GateConfig(
             device_id=device_id or uuid4().hex,
             name=str(data[CONF_NAME]),
@@ -545,19 +548,21 @@ class VirtualDevicesConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 )
             ),
             pulse_interval_ms=int(data[CONF_PULSE_INTERVAL_MS]),
-            pulse_count=2 if asymmetric else int(data[CONF_PULSE_COUNT]),
+            pulse_count=(2 if asymmetric else 3)
+            if fixed_profile
+            else int(data[CONF_PULSE_COUNT]),
             stop_strategy=StopStrategyType.UNSUPPORTED
-            if asymmetric
+            if fixed_profile
             else StopStrategyType(data[CONF_STOP_STRATEGY]),
             direction_change_strategy=DirectionChangeStrategyType.UNSUPPORTED
-            if asymmetric
+            if fixed_profile
             else DirectionChangeStrategyType(data[CONF_DIRECTION_CHANGE_STRATEGY]),
             repeated_open_policy=RepeatedCommandPolicy.IGNORE
-            if asymmetric
+            if fixed_profile
             else RepeatedCommandPolicy(data[CONF_REPEATED_OPEN_POLICY]),
             repeated_close_policy=RepeatedCommandPolicy(
                 RepeatedCommandPolicy.IGNORE.value
-                if asymmetric
+                if fixed_profile
                 else data[CONF_REPEATED_CLOSE_POLICY]
             ),
         )

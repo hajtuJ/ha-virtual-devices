@@ -128,6 +128,7 @@
       "multi_pulse_requires_multiple": "Strategia multi-pulse wymaga co najmniej dwóch impulsów.",
       "repeated_stop_requires_stop": "Polityka STOP dla powtórzonej komendy wymaga skonfigurowanej strategii STOP.",
       "asymmetric_closed_limit_required": "Asymetryczny tryb krok po kroku wymaga krańcówki CLOSED.",
+      "symmetric_profile_is_fixed": "Symetryczny tryb krok po kroku używa stałego profilu STOP, zmiany kierunku i powtórzonych komend.",
       "asymmetric_profile_is_fixed": "Asymetryczny tryb krok po kroku używa stałego profilu STOP, zmiany kierunku i powtórzonych komend."
     },
     "abort": {
@@ -145,6 +146,7 @@
     "control_mode": {
       "options": {
         "single_step": "Pojedyncze sterowanie krok po kroku",
+        "symmetric_single_step": "Rozszerzony krok po kroku (symetryczny)",
         "asymmetric_single_step": "Rozszerzony krok po kroku (asymetryczny)",
         "separate_open_close": "Oddzielne OPEN i CLOSE",
         "separate_open_close_stop": "Oddzielne OPEN, CLOSE i STOP"
@@ -239,6 +241,9 @@
     },
     "asymmetric_state_unknown": {
       "message": "Faza asymetrycznego sterowania krok po kroku jest nieznana. Przed wysłaniem komendy przesuń bramę ręcznie do skonfigurowanej krańcówki."
+    },
+    "symmetric_state_unknown": {
+      "message": "Faza symetrycznego sterowania krok po kroku jest nieznana. Przed wysłaniem komendy przesuń bramę ręcznie do znanego położenia krańcowego."
     },
     "command_sequence_failed": {
       "message": "Sekwencja sterowania bramą nie powiodła się po możliwym rozpoczęciu fizycznej akcji. Stan bramy jest teraz nieznany."

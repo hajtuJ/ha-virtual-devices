@@ -22,6 +22,24 @@ async def async_get_config_entry_diagnostics(
     config = runtime.config
     snapshot = runtime.controller.snapshot
     asymmetric = config.control_mode is ControlMode.ASYMMETRIC_SINGLE_STEP
+    symmetric = config.control_mode is ControlMode.SYMMETRIC_SINGLE_STEP
+    effective_behavior: dict[str, str | int] | None = None
+    if asymmetric:
+        effective_behavior = {
+            "stop_while_opening": "one_pulse",
+            "stop_while_closing": "unsupported",
+            "opening_to_closing_pulses": 2,
+            "closing_to_opening_pulses": 1,
+        }
+    elif symmetric:
+        effective_behavior = {
+            "stop_while_opening": "one_pulse",
+            "stop_while_closing": "one_pulse",
+            "opening_to_closing_pulses": 2,
+            "closing_to_opening_pulses": 2,
+            "stopped_same_direction_pulses": 3,
+            "stopped_opposite_direction_pulses": 1,
+        }
     return {
         "config": {
             "config_version": config.config_version,
@@ -32,17 +50,14 @@ async def async_get_config_entry_diagnostics(
             "has_obstacle_source": config.obstacle_source is not None,
             "stop_strategy": config.stop_strategy.value,
             "direction_change_strategy": config.direction_change_strategy.value,
-            "control_profile": "asymmetric_single_step"
-            if asymmetric
-            else "configured_strategies",
-            "effective_directional_behavior": {
-                "stop_while_opening": "one_pulse",
-                "stop_while_closing": "unsupported",
-                "opening_to_closing_pulses": 2,
-                "closing_to_opening_pulses": 1,
-            }
-            if asymmetric
-            else None,
+            "control_profile": (
+                "asymmetric_single_step"
+                if asymmetric
+                else "symmetric_single_step"
+                if symmetric
+                else "configured_strategies"
+            ),
+            "effective_directional_behavior": effective_behavior,
             "opening_time_ms": config.opening_time_ms,
             "closing_time_ms": config.closing_time_ms,
             "opening_margin_ms": config.opening_margin_ms,

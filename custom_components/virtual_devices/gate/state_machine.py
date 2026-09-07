@@ -110,6 +110,8 @@ class GateStateMachine:
         """Handle an OPEN or CLOSE request."""
         if self._commands_blocked(snapshot, command):
             return GateTransition(snapshot)
+        if self._config.control_mode is ControlMode.SYMMETRIC_SINGLE_STEP:
+            return self._symmetric_command(snapshot, command)
         if self._config.control_mode is ControlMode.ASYMMETRIC_SINGLE_STEP:
             return self._asymmetric_command(snapshot, command)
 
@@ -156,6 +158,81 @@ class GateStateMachine:
             next_snapshot,
             (
                 GateEffect(GateEffectType.EXECUTE_COMMAND, command),
+                GateEffect(GateEffectType.START_MOVEMENT_TIMER),
+            ),
+        )
+
+    def _symmetric_command(
+        self, snapshot: GateSnapshot, command: GateCommand
+    ) -> GateTransition:
+        """Apply the fixed symmetric OPEN-STOP-CLOSE-STOP controller cycle."""
+        if (
+            command is GateCommand.OPEN
+            and snapshot.state in (GateState.OPEN, GateState.OPENING)
+        ) or (
+            command is GateCommand.CLOSE
+            and snapshot.state in (GateState.CLOSED, GateState.CLOSING)
+        ):
+            return GateTransition(snapshot)
+
+        pulse_count: int
+        cancel_timer = snapshot.state in (GateState.OPENING, GateState.CLOSING)
+        if (snapshot.state is GateState.CLOSED and command is GateCommand.OPEN) or (
+            snapshot.state is GateState.OPEN and command is GateCommand.CLOSE
+        ):
+            pulse_count = 1
+        elif (
+            snapshot.state is GateState.OPENING and command is GateCommand.CLOSE
+        ) or (snapshot.state is GateState.CLOSING and command is GateCommand.OPEN):
+            pulse_count = 2
+        elif snapshot.state is GateState.STOPPED and snapshot.last_direction in (
+            GateDirection.OPENING,
+            GateDirection.CLOSING,
+        ):
+            target_direction = (
+                GateDirection.OPENING
+                if command is GateCommand.OPEN
+                else GateDirection.CLOSING
+            )
+            pulse_count = 3 if target_direction is snapshot.last_direction else 1
+        else:
+            return GateTransition(snapshot)
+
+        target_state = (
+            GateState.OPENING if command is GateCommand.OPEN else GateState.CLOSING
+        )
+        target_direction = (
+            GateDirection.OPENING
+            if command is GateCommand.OPEN
+            else GateDirection.CLOSING
+        )
+        start_position = snapshot.estimated_position
+        if snapshot.state is GateState.CLOSED:
+            start_position = 0
+        elif snapshot.state is GateState.OPEN:
+            start_position = 100
+        next_snapshot = replace(
+            snapshot,
+            state=target_state,
+            current_direction=target_direction,
+            last_direction=target_direction,
+            estimated_position=start_position,
+            problem=self._ambient_problem(snapshot),
+            last_command=command,
+        )
+        timer_effects: tuple[GateEffect, ...] = ()
+        if cancel_timer:
+            timer_effects = (GateEffect(GateEffectType.CANCEL_MOVEMENT_TIMER),)
+        return self._result(
+            snapshot,
+            next_snapshot,
+            (
+                GateEffect(
+                    GateEffectType.EXECUTE_STEP_PULSES,
+                    command=command,
+                    pulse_count=pulse_count,
+                ),
+                *timer_effects,
                 GateEffect(GateEffectType.START_MOVEMENT_TIMER),
             ),
         )
@@ -303,14 +380,27 @@ class GateStateMachine:
 
     def _stop(self, snapshot: GateSnapshot) -> GateTransition:
         """Stop motion through the configured strategy while preserving history."""
-        if self._config.control_mode is ControlMode.ASYMMETRIC_SINGLE_STEP:
-            if snapshot.state is not GateState.OPENING or not snapshot.source_available:
+        if self._config.control_mode in (
+            ControlMode.SYMMETRIC_SINGLE_STEP,
+            ControlMode.ASYMMETRIC_SINGLE_STEP,
+        ):
+            allowed_states = (
+                (GateState.OPENING, GateState.CLOSING)
+                if self._config.control_mode is ControlMode.SYMMETRIC_SINGLE_STEP
+                else (GateState.OPENING,)
+            )
+            if snapshot.state not in allowed_states or not snapshot.source_available:
                 return GateTransition(snapshot)
+            last_direction = (
+                GateDirection.OPENING
+                if snapshot.state is GateState.OPENING
+                else GateDirection.CLOSING
+            )
             stopped = replace(
                 snapshot,
                 state=GateState.STOPPED,
                 current_direction=GateDirection.UNKNOWN,
-                last_direction=GateDirection.OPENING,
+                last_direction=last_direction,
                 problem=self._ambient_problem(snapshot),
                 last_command=GateCommand.STOP,
             )

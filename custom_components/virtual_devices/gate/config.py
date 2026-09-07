@@ -152,6 +152,7 @@ class GateConfig:
         """Enforce the selected controller topology and output uniqueness."""
         if self.control_mode in (
             ControlMode.SINGLE_STEP,
+            ControlMode.SYMMETRIC_SINGLE_STEP,
             ControlMode.ASYMMETRIC_SINGLE_STEP,
         ):
             valid = self.step_source is not None and all(
@@ -224,16 +225,25 @@ class GateConfig:
 
     def _validate_strategies(self) -> None:
         """Ensure each strategy can be executed by the configured topology."""
-        if self.control_mode is ControlMode.ASYMMETRIC_SINGLE_STEP:
+        fixed_pulse_count = {
+            ControlMode.SYMMETRIC_SINGLE_STEP: 3,
+            ControlMode.ASYMMETRIC_SINGLE_STEP: 2,
+        }.get(self.control_mode)
+        if fixed_pulse_count is not None:
             if (
                 self.stop_strategy is not StopStrategyType.UNSUPPORTED
                 or self.direction_change_strategy
                 is not DirectionChangeStrategyType.UNSUPPORTED
                 or self.repeated_open_policy is not RepeatedCommandPolicy.IGNORE
                 or self.repeated_close_policy is not RepeatedCommandPolicy.IGNORE
-                or self.pulse_count != 2
+                or self.pulse_count != fixed_pulse_count
             ):
-                raise GateConfigError(CONF_CONTROL_MODE, "asymmetric_profile_is_fixed")
+                code = (
+                    "asymmetric_profile_is_fixed"
+                    if self.control_mode is ControlMode.ASYMMETRIC_SINGLE_STEP
+                    else "symmetric_profile_is_fixed"
+                )
+                raise GateConfigError(CONF_CONTROL_MODE, code)
             return
         if self.stop_strategy is StopStrategyType.CUSTOM_SEQUENCE:
             raise GateConfigError(CONF_STOP_STRATEGY, "custom_sequence_not_supported")
