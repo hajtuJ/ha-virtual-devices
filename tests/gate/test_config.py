@@ -93,6 +93,27 @@ def test_each_control_topology_is_valid(
     assert config.control_mode is mode
 
 
+def test_asymmetric_single_step_requires_closed_limit_and_fixed_profile() -> None:
+    """The asymmetric cycle cannot be configured without its phase authority."""
+    with pytest.raises(GateConfigError, match="asymmetric_closed_limit_required"):
+        single_step_config(control_mode=ControlMode.ASYMMETRIC_SINGLE_STEP)
+
+    config = single_step_config(
+        control_mode=ControlMode.ASYMMETRIC_SINGLE_STEP,
+        closed_limit=GateLimitConfig("binary_sensor.gate_closed"),
+    )
+    assert config.open_limit is None
+    with_both_limits = replace(
+        config,
+        open_limit=GateLimitConfig("binary_sensor.gate_open"),
+    )
+    assert with_both_limits.open_limit is not None
+    assert GateConfig.from_dict(with_both_limits.to_dict()) == with_both_limits
+
+    with pytest.raises(GateConfigError, match="asymmetric_profile_is_fixed"):
+        replace(config, repeated_open_policy=RepeatedCommandPolicy.REPEAT)
+
+
 def test_control_mode_rejects_missing_and_extra_sources() -> None:
     """A mode cannot silently ignore or invent required physical controls."""
     with pytest.raises(GateConfigError, match="invalid_source_layout"):

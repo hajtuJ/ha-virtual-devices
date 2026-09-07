@@ -45,7 +45,7 @@
       },
       "limits": {
         "title": "Krańcówki i czujniki bezpieczeństwa",
-        "description": "Krańcówki są opcjonalne. Ich stan fizyczny ma pierwszeństwo przed estymacją czasu.",
+        "description": "Krańcówki są opcjonalne z wyjątkiem asymetrycznego trybu krok po kroku, który wymaga krańcówki CLOSED. Ich stan fizyczny ma pierwszeństwo przed estymacją czasu.",
         "data": {
           "open_limit": "Krańcówka OPEN",
           "open_limit_active_state": "Krańcówka OPEN aktywna przy stanie on",
@@ -83,7 +83,7 @@
       },
       "advanced": {
         "title": "Zachowanie komend",
-        "description": "Wybierz wyłącznie zachowanie obsługiwane przez fizyczny sterownik. Bezpieczne wartości domyślne ignorują STOP, zmianę kierunku i powtórzone komendy.",
+        "description": "Skonfiguruj czasy komend i, jeśli opcje są dostępne, wybierz wyłącznie zachowanie obsługiwane przez fizyczny sterownik. Bezpieczne wartości domyślne ignorują STOP, zmianę kierunku i powtórzone komendy.",
         "data": {
           "pulse_duration_ms": "Czas impulsu (ms)",
           "hold_duration_ms": "Czas HOLD (ms)",
@@ -125,7 +125,9 @@
       "direct_requires_separate_controls": "Bezpośrednia zmiana kierunku wymaga oddzielnych sterowań OPEN i CLOSE.",
       "reversal_requires_stop": "Ta strategia zmiany kierunku wymaga skonfigurowanej strategii STOP.",
       "multi_pulse_requires_multiple": "Strategia multi-pulse wymaga co najmniej dwóch impulsów.",
-      "repeated_stop_requires_stop": "Polityka STOP dla powtórzonej komendy wymaga skonfigurowanej strategii STOP."
+      "repeated_stop_requires_stop": "Polityka STOP dla powtórzonej komendy wymaga skonfigurowanej strategii STOP.",
+      "asymmetric_closed_limit_required": "Asymetryczny tryb krok po kroku wymaga krańcówki CLOSED.",
+      "asymmetric_profile_is_fixed": "Asymetryczny tryb krok po kroku używa stałego profilu STOP, zmiany kierunku i powtórzonych komend."
     },
     "abort": {
       "duplicate_gate": "Wirtualna brama używa już tego zestawu encji sterujących.",
@@ -136,6 +138,7 @@
     "control_mode": {
       "options": {
         "single_step": "Pojedyncze sterowanie krok po kroku",
+        "asymmetric_single_step": "Rozszerzony krok po kroku (asymetryczny)",
         "separate_open_close": "Oddzielne OPEN i CLOSE",
         "separate_open_close_stop": "Oddzielne OPEN, CLOSE i STOP"
       }
@@ -223,6 +226,15 @@
     },
     "direction_unknown": {
       "message": "Kierunek ruchu jest nieznany, dlatego tej strategii STOP nie można bezpiecznie użyć."
+    },
+    "stop_unavailable_while_closing": {
+      "message": "Ten sterownik nie może zatrzymać bramy podczas zamykania; STOP nie został wysłany."
+    },
+    "asymmetric_state_unknown": {
+      "message": "Faza asymetrycznego sterowania krok po kroku jest nieznana. Przed wysłaniem komendy przesuń bramę ręcznie do skonfigurowanej krańcówki."
+    },
+    "command_sequence_failed": {
+      "message": "Sekwencja sterowania bramą nie powiodła się po możliwym rozpoczęciu fizycznej akcji. Stan bramy jest teraz nieznany."
     }
   }
 }

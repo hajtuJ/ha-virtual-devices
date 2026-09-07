@@ -15,6 +15,8 @@ from homeassistant.helpers.event import async_call_later, async_track_time_inter
 from ..const import DOMAIN
 from .command_executor import (
     CommandExecutorConfig,
+    CommandSequenceCancelledError,
+    CommandSequenceError,
     GateCommandExecutor,
     SourceActions,
     SourceUnavailableError,
@@ -22,6 +24,7 @@ from .command_executor import (
 from .command_models import CommandSequence, CommandStep, CommandStepType, SourceRef
 from .models import (
     ControlActionType,
+    ControlMode,
     DirectionChangeStrategyType,
     GateCommand,
     GateDirection,
@@ -77,6 +80,7 @@ class GateController:
                 direction_change_strategy=config.direction_change_strategy,
                 repeated_open_policy=config.repeated_open_policy,
                 repeated_close_policy=config.repeated_close_policy,
+                control_mode=config.control_mode,
             )
         )
         interlocks: tuple[frozenset[SourceRef], ...] = ()
@@ -122,6 +126,8 @@ class GateController:
     @property
     def supports_stop(self) -> bool:
         """Return whether configured STOP behavior is executable."""
+        if self.config.control_mode is ControlMode.ASYMMETRIC_SINGLE_STEP:
+            return self._snapshot.state is GateState.OPENING
         return self.config.stop_strategy is not StopStrategyType.UNSUPPORTED
 
     @property
@@ -212,6 +218,11 @@ class GateController:
     async def async_stop(self) -> None:
         """Request configured STOP behavior."""
         if not self.supports_stop:
+            if (
+                self.config.control_mode is ControlMode.ASYMMETRIC_SINGLE_STEP
+                and self._snapshot.state is GateState.CLOSING
+            ):
+                self._raise_rejected("stop_unavailable_while_closing")
             self._raise_rejected("stop_unsupported")
         await self.async_command(GateCommand.STOP)
 
@@ -233,6 +244,7 @@ class GateController:
                 self._raise_rejected("limit_sensor_conflict")
             if command is GateCommand.CLOSE and self._snapshot.obstacle_active:
                 self._raise_rejected("obstacle_active")
+            self._validate_asymmetric_command(command)
 
             self._update_position_snapshot()
             event_type = {
@@ -251,6 +263,7 @@ class GateController:
                     GateEffectType.EXECUTE_STOP_STRATEGY,
                     GateEffectType.EXECUTE_DIRECTION_CHANGE_STRATEGY,
                     GateEffectType.EXECUTE_REPEATED_COMMAND_POLICY,
+                    GateEffectType.EXECUTE_STEP_PULSES,
                 )
             )
             if not command_effects:
@@ -264,9 +277,26 @@ class GateController:
             self._active_execution = task
             try:
                 await task
-            except SourceUnavailableError:
-                self._apply_passive_event(GateEventType.SOURCE_UNAVAILABLE)
+            except SourceUnavailableError as err:
+                if self._asymmetric_action_is_uncertain(err.physical_action_started):
+                    self._mark_execution_uncertain(
+                        GateProblem.SOURCE_UNAVAILABLE, command
+                    )
+                else:
+                    self._apply_passive_event(GateEventType.SOURCE_UNAVAILABLE)
                 self._raise_rejected("source_unavailable")
+            except CommandSequenceCancelledError as err:
+                if self._asymmetric_action_is_uncertain(err.physical_action_started):
+                    self._mark_execution_uncertain(
+                        GateProblem.COMMAND_SEQUENCE_FAILED, command
+                    )
+                raise
+            except CommandSequenceError as err:
+                if self._asymmetric_action_is_uncertain(err.physical_action_started):
+                    self._mark_execution_uncertain(
+                        GateProblem.COMMAND_SEQUENCE_FAILED, command
+                    )
+                self._raise_rejected("command_sequence_failed")
             finally:
                 if self._active_execution is task:
                     self._active_execution = None
@@ -291,6 +321,50 @@ class GateController:
             if not await self._actions.async_is_available(source):
                 return False
         return True
+
+    def _validate_asymmetric_command(self, command: GateCommand) -> None:
+        """Reject asymmetric commands whose physical result cannot be predicted."""
+        if self.config.control_mode is not ControlMode.ASYMMETRIC_SINGLE_STEP:
+            return
+        snapshot = self._snapshot
+        if command is GateCommand.STOP:
+            if snapshot.state is GateState.CLOSING:
+                self._raise_rejected("stop_unavailable_while_closing")
+            if snapshot.state is not GateState.OPENING:
+                self._raise_rejected("stop_unsupported")
+            return
+        if snapshot.state in (
+            GateState.UNKNOWN,
+            GateState.UNKNOWN_MOVING,
+            GateState.ERROR,
+        ) or (
+            snapshot.state is GateState.STOPPED
+            and snapshot.last_direction is not GateDirection.OPENING
+        ):
+            self._raise_rejected("asymmetric_state_unknown")
+
+    def _asymmetric_action_is_uncertain(self, action_started: bool) -> bool:
+        return (
+            action_started
+            and self.config.control_mode is ControlMode.ASYMMETRIC_SINGLE_STEP
+        )
+
+    def _mark_execution_uncertain(
+        self, problem: GateProblem, command: GateCommand
+    ) -> None:
+        """Freeze runtime after a partially attempted asymmetric pulse sequence."""
+        self._freeze_position()
+        self._cancel_timers()
+        self._set_snapshot(
+            replace(
+                self._snapshot,
+                state=GateState.UNKNOWN,
+                current_direction=GateDirection.UNKNOWN,
+                last_command=command,
+                problem=problem,
+                source_available=problem is not GateProblem.SOURCE_UNAVAILABLE,
+            )
+        )
 
     def _apply_passive_event(self, event_type: GateEventType) -> None:
         """Apply an event that cannot emit physical command effects."""
@@ -421,6 +495,10 @@ class GateController:
             raise RuntimeError(msg)
         if effect.type is GateEffectType.EXECUTE_COMMAND:
             return self._basic_command_steps(effect.command)
+        if effect.type is GateEffectType.EXECUTE_STEP_PULSES:
+            if effect.pulse_count is None:
+                raise RuntimeError("step pulse effect has no pulse count")
+            return self._asymmetric_pulse_steps(effect.pulse_count)
         if effect.type is GateEffectType.EXECUTE_STOP_STRATEGY:
             return self._stop_steps(original)
         if effect.type is GateEffectType.EXECUTE_DIRECTION_CHANGE_STRATEGY:
@@ -436,6 +514,24 @@ class GateController:
     def _basic_command_steps(self, command: GateCommand) -> tuple[CommandStep, ...]:
         source = self._source_for_command(command)
         return self._source_steps(source, self.config.pulse_duration_ms)
+
+    def _asymmetric_pulse_steps(self, pulse_count: int) -> tuple[CommandStep, ...]:
+        """Build the fixed one-source pulse series for the asymmetric profile."""
+        source = self.config.step_source
+        if source is None:
+            raise RuntimeError("asymmetric step profile has no source")
+        pulse = self._source_steps(source, self.config.pulse_duration_ms)
+        steps: list[CommandStep] = []
+        for index in range(pulse_count):
+            if index and self.config.pulse_interval_ms > 0:
+                steps.append(
+                    CommandStep(
+                        CommandStepType.DELAY,
+                        duration_ms=self.config.pulse_interval_ms,
+                    )
+                )
+            steps.extend(pulse)
+        return tuple(steps)
 
     def _stop_steps(self, snapshot: GateSnapshot) -> tuple[CommandStep, ...]:
         strategy = self.config.stop_strategy

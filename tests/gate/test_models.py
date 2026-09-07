@@ -79,11 +79,23 @@ def test_effect_payload_is_validated() -> None:
     """Test command payload compatibility with effect type."""
     effect = GateEffect(GateEffectType.EXECUTE_COMMAND, GateCommand.OPEN)
     assert effect.command is GateCommand.OPEN
+    pulse_effect = GateEffect(
+        GateEffectType.EXECUTE_STEP_PULSES,
+        GateCommand.CLOSE,
+        pulse_count=2,
+    )
+    assert pulse_effect.pulse_count == 2
 
     with pytest.raises(ValueError, match="requires only a command"):
         GateEffect(GateEffectType.EXECUTE_COMMAND)
     with pytest.raises(ValueError, match="cannot carry command"):
         GateEffect(GateEffectType.STATE_CHANGED, GateCommand.CLOSE)
+    with pytest.raises(ValueError, match="pulse count"):
+        GateEffect(
+            GateEffectType.EXECUTE_STEP_PULSES,
+            GateCommand.CLOSE,
+            pulse_count=0,
+        )
 
 
 def test_strategy_enums_preserve_specification_values() -> None:

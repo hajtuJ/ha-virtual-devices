@@ -11,6 +11,8 @@ All notable changes to Virtual Devices are documented here. The project follows
   Gates.
 - Single step-by-step, separate OPEN/CLOSE, and separate OPEN/CLOSE/STOP controller
   topologies backed by switch or button entities.
+- Extended asymmetric step-by-step control with direction-specific 1/2-pulse
+  reversal, opening-only STOP, and one- or two-endpoint operation.
 - Serialized pulse, bounded HOLD, STOP, reversal, and repeated-command execution.
 - Gate cover with truthful dynamic STOP support and no `SET_POSITION` capability.
 - Zero, one, or two inverted/debounced endpoint sensors plus optional obstacle input.
@@ -29,6 +31,8 @@ All notable changes to Virtual Devices are documented here. The project follows
 - Command sequences are preflighted and serialized; OPEN/CLOSE outputs are
   interlocked.
 - Cancellation, exceptions, source loss, and unload use guaranteed relay cleanup.
+- Partially attempted asymmetric sequences enter an explicit unknown fault state and
+  are never resumed or retried automatically.
 - Physical endpoints outrank estimates/history, and simultaneous endpoints block
   movement without automatic correction.
 

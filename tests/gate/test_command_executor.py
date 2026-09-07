@@ -10,6 +10,8 @@ import pytest
 from custom_components.virtual_devices.gate import (
     CommandExecutorConfig,
     CommandSequence,
+    CommandSequenceCancelledError,
+    CommandSequenceError,
     CommandStep,
     CommandStepType,
     ControlActionType,
@@ -117,8 +119,9 @@ async def test_cancellation_during_delay_always_deactivates_owned_output() -> No
     await sleep_started.wait()
     task.cancel()
 
-    with pytest.raises(asyncio.CancelledError):
+    with pytest.raises(CommandSequenceCancelledError) as exc_info:
         await task
+    assert exc_info.value.physical_action_started
     assert actions.calls[-1] == ("deactivate", "switch.gate")
 
 
@@ -133,8 +136,9 @@ async def test_activation_exception_still_deactivates_possibly_owned_output() ->
     actions.activate_hook = fail_activation
     executor = GateCommandExecutor(actions)
 
-    with pytest.raises(RuntimeError, match="controller failed"):
+    with pytest.raises(CommandSequenceError, match="controller failed") as exc_info:
         await executor.async_execute(pulse_sequence("pulse", SWITCH, 100))
+    assert exc_info.value.physical_action_started
     assert actions.calls == [
         ("activate", "switch.gate"),
         ("deactivate", "switch.gate"),
@@ -178,8 +182,9 @@ async def test_preflight_rejects_unavailable_source_before_any_action() -> None:
     """A known-invalid sequence never starts partially."""
     actions = FakeActions(available=[False])
     executor = GateCommandExecutor(actions)
-    with pytest.raises(SourceUnavailableError, match="unavailable"):
+    with pytest.raises(SourceUnavailableError, match="unavailable") as exc_info:
         await executor.async_execute(pulse_sequence("pulse", SWITCH, 100))
+    assert not exc_info.value.physical_action_started
     assert actions.calls == []
 
 
@@ -190,8 +195,9 @@ async def test_mid_sequence_unavailability_aborts_and_cleans_up() -> None:
     executor = GateCommandExecutor(
         actions, sleep=clock.sleep, monotonic=clock.monotonic
     )
-    with pytest.raises(SourceUnavailableError, match="became unavailable"):
+    with pytest.raises(SourceUnavailableError, match="became unavailable") as exc_info:
         await executor.async_execute(pulse_sequence("pulse", SWITCH, 100))
+    assert exc_info.value.physical_action_started
     assert actions.calls == [
         ("activate", "switch.gate"),
         ("deactivate", "switch.gate"),

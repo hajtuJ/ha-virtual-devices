@@ -19,8 +19,26 @@ class ConcurrentCommandPolicy(StrEnum):
     QUEUE = "queue"
 
 
-class SourceUnavailableError(RuntimeError):
+class CommandSequenceError(RuntimeError):
+    """Report a sequence failure and whether a physical action may have started."""
+
+    def __init__(self, message: str, *, physical_action_started: bool = False) -> None:
+        """Initialize failure progress used for conservative state recovery."""
+        super().__init__(message)
+        self.physical_action_started = physical_action_started
+
+
+class SourceUnavailableError(CommandSequenceError):
     """Raised before using a source that is not currently available."""
+
+
+class CommandSequenceCancelledError(asyncio.CancelledError):
+    """Cancellation carrying whether a physical action may have started."""
+
+    def __init__(self, *, physical_action_started: bool) -> None:
+        """Initialize cancellation progress after executor cleanup."""
+        super().__init__("command sequence cancelled")
+        self.physical_action_started = physical_action_started
 
 
 class UnsafeSequenceError(RuntimeError):
@@ -111,14 +129,34 @@ class GateCommandExecutor:
 
     async def async_execute(self, sequence: CommandSequence) -> None:
         """Queue and execute a sequence with preflight and final cleanup."""
+        progress = _ExecutionProgress()
         async with self._lock:
-            await self._preflight(sequence)
-            await self._wait_for_interval(
-                self._last_command_at,
-                self._config.minimum_command_interval_ms,
-            )
-            self._last_command_at = self._monotonic()
-            await self._execute_locked(sequence)
+            try:
+                await self._preflight(sequence)
+                await self._wait_for_interval(
+                    self._last_command_at,
+                    self._config.minimum_command_interval_ms,
+                )
+                self._last_command_at = self._monotonic()
+                await self._execute_locked(sequence, progress)
+            except SourceUnavailableError as err:
+                if err.physical_action_started == progress.physical_action_started:
+                    raise
+                raise SourceUnavailableError(
+                    str(err),
+                    physical_action_started=progress.physical_action_started,
+                ) from err
+            except UnsafeSequenceError:
+                raise
+            except asyncio.CancelledError as err:
+                raise CommandSequenceCancelledError(
+                    physical_action_started=progress.physical_action_started
+                ) from err
+            except Exception as err:
+                raise CommandSequenceError(
+                    str(err),
+                    physical_action_started=progress.physical_action_started,
+                ) from err
 
     async def _preflight(self, sequence: CommandSequence) -> None:
         """Validate all critical sources before the first physical action."""
@@ -128,7 +166,9 @@ class GateCommandExecutor:
                 msg = f"source is unavailable: {source.entity_id}"
                 raise SourceUnavailableError(msg)
 
-    async def _execute_locked(self, sequence: CommandSequence) -> None:
+    async def _execute_locked(
+        self, sequence: CommandSequence, progress: _ExecutionProgress
+    ) -> None:
         """Run steps while tracking every output owned by this execution."""
         active: set[SourceRef] = set()
         activation_order: list[SourceRef] = []
@@ -152,11 +192,14 @@ class GateCommandExecutor:
                     if source not in active:
                         active.add(source)
                         activation_order.append(source)
+                    progress.physical_action_started = True
                     await self._actions.async_activate(source)
                 elif step.type is CommandStepType.DEACTIVATE:
+                    progress.physical_action_started = True
                     await self._actions.async_deactivate(source)
                     active.discard(source)
                 else:
+                    progress.physical_action_started = True
                     await self._actions.async_press(source)
                 self._last_action_at = self._monotonic()
         finally:
@@ -200,3 +243,10 @@ class GateCommandExecutor:
             msg = "physical action step has no source"
             raise ValueError(msg)
         return step.source
+
+
+@dataclass(slots=True)
+class _ExecutionProgress:
+    """Mutable progress scoped to one serialized sequence execution."""
+
+    physical_action_started: bool = False

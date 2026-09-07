@@ -41,6 +41,7 @@ class GateProblem(StrEnum):
     CLOSING_TIMEOUT = "closing_timeout"
     LIMIT_SENSOR_CONFLICT = "limit_sensor_conflict"
     SOURCE_UNAVAILABLE = "source_unavailable"
+    COMMAND_SEQUENCE_FAILED = "command_sequence_failed"
     OBSTACLE = "obstacle"
 
 
@@ -48,6 +49,7 @@ class ControlMode(StrEnum):
     """Physical controller layout used by a virtual gate."""
 
     SINGLE_STEP = "single_step"
+    ASYMMETRIC_SINGLE_STEP = "asymmetric_single_step"
     SEPARATE_OPEN_CLOSE = "separate_open_close"
     SEPARATE_OPEN_CLOSE_STOP = "separate_open_close_stop"
 
@@ -118,6 +120,7 @@ class GateEffectType(StrEnum):
     EXECUTE_STOP_STRATEGY = "execute_stop_strategy"
     EXECUTE_DIRECTION_CHANGE_STRATEGY = "execute_direction_change_strategy"
     EXECUTE_REPEATED_COMMAND_POLICY = "execute_repeated_command_policy"
+    EXECUTE_STEP_PULSES = "execute_step_pulses"
     START_MOVEMENT_TIMER = "start_movement_timer"
     CANCEL_MOVEMENT_TIMER = "cancel_movement_timer"
     STATE_CHANGED = "state_changed"
@@ -139,6 +142,7 @@ class GateEffect:
     strategy: (
         StopStrategyType | DirectionChangeStrategyType | RepeatedCommandPolicy | None
     ) = None
+    pulse_count: int | None = None
 
     def __post_init__(self) -> None:
         """Validate effect payload compatibility."""
@@ -146,8 +150,22 @@ class GateEffect:
         expected_command: GateCommand | None = None
 
         if self.type is GateEffectType.EXECUTE_COMMAND:
-            if self.command is None or self.strategy is not None:
+            if (
+                self.command is None
+                or self.strategy is not None
+                or self.pulse_count is not None
+            ):
                 msg = "execute-command effect requires only a command"
+                raise ValueError(msg)
+            return
+        if self.type is GateEffectType.EXECUTE_STEP_PULSES:
+            if (
+                self.command is None
+                or self.strategy is not None
+                or self.pulse_count is None
+                or self.pulse_count <= 0
+            ):
+                msg = "execute-step-pulses effect requires a command and pulse count"
                 raise ValueError(msg)
             return
         if self.type is GateEffectType.EXECUTE_STOP_STRATEGY:
@@ -159,8 +177,10 @@ class GateEffect:
             expected_strategy_type = RepeatedCommandPolicy
 
         if expected_strategy_type is not None:
-            if self.command is None or not isinstance(
-                self.strategy, expected_strategy_type
+            if (
+                self.command is None
+                or not isinstance(self.strategy, expected_strategy_type)
+                or self.pulse_count is not None
             ):
                 msg = f"{self.type.value} requires a command and matching strategy"
                 raise ValueError(msg)
@@ -169,7 +189,11 @@ class GateEffect:
                 raise ValueError(msg)
             return
 
-        if self.command is not None or self.strategy is not None:
+        if (
+            self.command is not None
+            or self.strategy is not None
+            or self.pulse_count is not None
+        ):
             msg = "non-command effects cannot carry command payload"
             raise ValueError(msg)
 

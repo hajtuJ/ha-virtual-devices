@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+import voluptuous as vol
 from custom_components.virtual_devices import (
     VirtualDevicesRuntimeData,
     async_migrate_entry,
@@ -14,10 +15,17 @@ from custom_components.virtual_devices.const import (
     CONF_CLOSED_LIMIT_DEBOUNCE_MS,
     CONF_CONTROL_MODE,
     CONF_DIRECTION_CHANGE_STRATEGY,
+    CONF_HOLD_DURATION_MS,
+    CONF_MINIMUM_COMMAND_INTERVAL_MS,
     CONF_OPEN_LIMIT,
     CONF_OPEN_LIMIT_ACTIVE_STATE,
     CONF_OPEN_LIMIT_DEBOUNCE_MS,
     CONF_OPEN_SOURCE,
+    CONF_PULSE_COUNT,
+    CONF_PULSE_DURATION_MS,
+    CONF_PULSE_INTERVAL_MS,
+    CONF_REPEATED_CLOSE_POLICY,
+    CONF_REPEATED_OPEN_POLICY,
     CONF_STEP_SOURCE,
     CONF_STOP_SOURCE,
     CONF_STOP_STRATEGY,
@@ -245,6 +253,89 @@ async def test_dedicated_stop_strategy_requires_stop_source(
         {CONF_STOP_STRATEGY: StopStrategyType.DEDICATED.value},
     )
     assert result["errors"] == {"base": "dedicated_stop_required"}
+
+
+async def test_asymmetric_flow_requires_closed_limit_and_hides_generic_strategies(
+    hass: HomeAssistant,
+) -> None:
+    """The dedicated profile exposes only timings that cannot change its cycle."""
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": config_entries.SOURCE_USER},
+        data={
+            CONF_NAME: "Asymmetric Gate",
+            CONF_CONTROL_MODE: ControlMode.ASYMMETRIC_SINGLE_STEP.value,
+        },
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_STEP_SOURCE: "button.gate"}
+    )
+    assert result["step_id"] == "limits"
+    assert result["data_schema"] is not None
+    assert any(
+        isinstance(key, vol.Required) and key.schema == CONF_CLOSED_LIMIT
+        for key in result["data_schema"].schema
+    )
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_CLOSED_LIMIT: "binary_sensor.gate_closed",
+            CONF_CLOSED_LIMIT_DEBOUNCE_MS: 0,
+        },
+    )
+    assert result["step_id"] == "timing"
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+    assert result["step_id"] == "advanced"
+    assert result["data_schema"] is not None
+
+    schema_keys = {str(key.schema) for key in result["data_schema"].schema}
+    assert schema_keys == {
+        CONF_PULSE_DURATION_MS,
+        CONF_MINIMUM_COMMAND_INTERVAL_MS,
+        CONF_PULSE_INTERVAL_MS,
+    }
+    assert CONF_HOLD_DURATION_MS not in schema_keys
+    assert CONF_PULSE_COUNT not in schema_keys
+    assert CONF_STOP_STRATEGY not in schema_keys
+    assert CONF_DIRECTION_CHANGE_STRATEGY not in schema_keys
+    assert CONF_REPEATED_OPEN_POLICY not in schema_keys
+    assert CONF_REPEATED_CLOSE_POLICY not in schema_keys
+
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    config = GateConfig.from_dict(dict(result["data"]))
+    assert config.control_mode is ControlMode.ASYMMETRIC_SINGLE_STEP
+    assert config.closed_limit is not None
+    assert config.open_limit is None
+    assert config.pulse_count == 2
+    assert config.stop_strategy is StopStrategyType.UNSUPPORTED
+    assert config.direction_change_strategy is DirectionChangeStrategyType.UNSUPPORTED
+
+
+async def test_asymmetric_flow_accepts_closed_and_open_limits(
+    hass: HomeAssistant,
+) -> None:
+    """The same fixed profile supports authoritative sensors at both endpoints."""
+    result = await advance_to_advanced(
+        hass,
+        name="Two-limit Asymmetric Gate",
+        mode=ControlMode.ASYMMETRIC_SINGLE_STEP,
+        controls={CONF_STEP_SOURCE: "button.two_limit_gate"},
+        limits={
+            CONF_CLOSED_LIMIT: "binary_sensor.two_limit_closed",
+            CONF_CLOSED_LIMIT_DEBOUNCE_MS: 0,
+            CONF_OPEN_LIMIT: "binary_sensor.two_limit_open",
+            CONF_OPEN_LIMIT_DEBOUNCE_MS: 0,
+        },
+    )
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    config = GateConfig.from_dict(dict(result["data"]))
+    assert config.control_mode is ControlMode.ASYMMETRIC_SINGLE_STEP
+    assert config.closed_limit is not None
+    assert config.open_limit is not None
 
 
 async def test_duplicate_gate_aborts_without_creating_another_entry(

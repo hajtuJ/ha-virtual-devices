@@ -45,7 +45,7 @@
       },
       "limits": {
         "title": "Endpoint and safety sensors",
-        "description": "Endpoint sensors are optional. Their physical state takes precedence over time estimates.",
+        "description": "Endpoint sensors are optional except in asymmetric step-by-step mode, which requires CLOSED. Their physical state takes precedence over time estimates.",
         "data": {
           "open_limit": "OPEN endpoint sensor",
           "open_limit_active_state": "OPEN sensor active when on",
@@ -83,7 +83,7 @@
       },
       "advanced": {
         "title": "Command behavior",
-        "description": "Choose only behavior supported by the physical controller. Safe defaults ignore STOP, reversal, and repeated commands.",
+        "description": "Configure command timing and, where available, choose only behavior supported by the physical controller. Safe defaults ignore STOP, reversal, and repeated commands.",
         "data": {
           "pulse_duration_ms": "Pulse duration (ms)",
           "hold_duration_ms": "HOLD duration (ms)",
@@ -125,7 +125,9 @@
       "direct_requires_separate_controls": "Direct reversal requires separate OPEN and CLOSE controls.",
       "reversal_requires_stop": "This reversal strategy requires a configured STOP strategy.",
       "multi_pulse_requires_multiple": "A multi-pulse strategy requires at least two pulses.",
-      "repeated_stop_requires_stop": "The repeated-command STOP policy requires a configured STOP strategy."
+      "repeated_stop_requires_stop": "The repeated-command STOP policy requires a configured STOP strategy.",
+      "asymmetric_closed_limit_required": "Asymmetric step-by-step mode requires a CLOSED endpoint sensor.",
+      "asymmetric_profile_is_fixed": "Asymmetric step-by-step uses a fixed STOP, reversal, and repeated-command profile."
     },
     "abort": {
       "duplicate_gate": "A virtual gate already uses this set of control entities.",
@@ -136,6 +138,7 @@
     "control_mode": {
       "options": {
         "single_step": "Single step-by-step control",
+        "asymmetric_single_step": "Extended step-by-step (asymmetric)",
         "separate_open_close": "Separate OPEN and CLOSE",
         "separate_open_close_stop": "Separate OPEN, CLOSE, and STOP"
       }
@@ -223,6 +226,15 @@
     },
     "direction_unknown": {
       "message": "The movement direction is unknown, so this STOP strategy cannot be used safely."
+    },
+    "stop_unavailable_while_closing": {
+      "message": "This controller cannot stop while closing; STOP was not sent."
+    },
+    "asymmetric_state_unknown": {
+      "message": "The asymmetric step-by-step phase is unknown. Move the gate manually to a configured endpoint before sending a command."
+    },
+    "command_sequence_failed": {
+      "message": "The gate command sequence failed after a physical action may have started. The gate state is now unknown."
     }
   }
 }

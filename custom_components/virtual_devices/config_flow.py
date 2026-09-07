@@ -223,6 +223,12 @@ class VirtualDevicesConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 self._data.update(normalized)
                 return await self.async_step_timing()
 
+        mode = ControlMode(self._data[CONF_CONTROL_MODE])
+        closed_limit_marker = (
+            self._required_marker(CONF_CLOSED_LIMIT)
+            if mode is ControlMode.ASYMMETRIC_SINGLE_STEP
+            else self._optional_marker(CONF_CLOSED_LIMIT)
+        )
         return self.async_show_form(
             step_id="limits",
             data_schema=vol.Schema(
@@ -238,7 +244,7 @@ class VirtualDevicesConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                             CONF_OPEN_LIMIT_DEBOUNCE_MS, DEFAULT_DEBOUNCE_MS
                         ),
                     ): _number_selector(minimum=0, maximum=60000),
-                    self._optional_marker(CONF_CLOSED_LIMIT): BINARY_SENSOR_SELECTOR,
+                    closed_limit_marker: BINARY_SENSOR_SELECTOR,
                     vol.Required(
                         CONF_CLOSED_LIMIT_ACTIVE_STATE,
                         default=self._data.get(CONF_CLOSED_LIMIT_ACTIVE_STATE, True),
@@ -331,7 +337,10 @@ class VirtualDevicesConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     def _controls_schema(self) -> vol.Schema:
         """Return a topology-specific source selection schema."""
         mode = ControlMode(self._data[CONF_CONTROL_MODE])
-        if mode is ControlMode.SINGLE_STEP:
+        if mode in (
+            ControlMode.SINGLE_STEP,
+            ControlMode.ASYMMETRIC_SINGLE_STEP,
+        ):
             fields: dict[vol.Marker, Any] = {
                 self._required_marker(CONF_STEP_SOURCE): CONTROL_SELECTOR
             }
@@ -346,6 +355,33 @@ class VirtualDevicesConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     def _advanced_schema(self) -> vol.Schema:
         """Return the safe strategy subset supported by the MVP UI."""
+        common_fields: dict[vol.Marker, Any] = {
+            vol.Required(
+                CONF_PULSE_DURATION_MS,
+                default=self._data.get(
+                    CONF_PULSE_DURATION_MS, DEFAULT_PULSE_DURATION_MS
+                ),
+            ): _number_selector(minimum=1, maximum=60000),
+            vol.Required(
+                CONF_MINIMUM_COMMAND_INTERVAL_MS,
+                default=self._data.get(
+                    CONF_MINIMUM_COMMAND_INTERVAL_MS,
+                    DEFAULT_COMMAND_INTERVAL_MS,
+                ),
+            ): _number_selector(minimum=0, maximum=600000),
+            vol.Required(
+                CONF_PULSE_INTERVAL_MS,
+                default=self._data.get(
+                    CONF_PULSE_INTERVAL_MS, DEFAULT_PULSE_INTERVAL_MS
+                ),
+            ): _number_selector(minimum=0, maximum=600000),
+        }
+        if (
+            ControlMode(self._data[CONF_CONTROL_MODE])
+            is ControlMode.ASYMMETRIC_SINGLE_STEP
+        ):
+            return vol.Schema(common_fields)
+
         stop_strategies = [
             strategy.value
             for strategy in StopStrategyType
@@ -363,12 +399,7 @@ class VirtualDevicesConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         ]
         return vol.Schema(
             {
-                vol.Required(
-                    CONF_PULSE_DURATION_MS,
-                    default=self._data.get(
-                        CONF_PULSE_DURATION_MS, DEFAULT_PULSE_DURATION_MS
-                    ),
-                ): _number_selector(minimum=1, maximum=60000),
+                **common_fields,
                 vol.Required(
                     CONF_HOLD_DURATION_MS,
                     default=self._data.get(
@@ -376,23 +407,10 @@ class VirtualDevicesConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     ),
                 ): _number_selector(minimum=1, maximum=600000),
                 vol.Required(
-                    CONF_MINIMUM_COMMAND_INTERVAL_MS,
-                    default=self._data.get(
-                        CONF_MINIMUM_COMMAND_INTERVAL_MS,
-                        DEFAULT_COMMAND_INTERVAL_MS,
-                    ),
-                ): _number_selector(minimum=0, maximum=600000),
-                vol.Required(
                     CONF_DIRECTION_CHANGE_DELAY_MS,
                     default=self._data.get(
                         CONF_DIRECTION_CHANGE_DELAY_MS,
                         DEFAULT_DIRECTION_CHANGE_DELAY_MS,
-                    ),
-                ): _number_selector(minimum=0, maximum=600000),
-                vol.Required(
-                    CONF_PULSE_INTERVAL_MS,
-                    default=self._data.get(
-                        CONF_PULSE_INTERVAL_MS, DEFAULT_PULSE_INTERVAL_MS
                     ),
                 ): _number_selector(minimum=0, maximum=600000),
                 vol.Required(
@@ -462,10 +480,12 @@ class VirtualDevicesConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         cls, data: dict[str, Any], device_id: str | None = None
     ) -> GateConfig:
         """Build and comprehensively validate the canonical configuration."""
+        mode = ControlMode(data[CONF_CONTROL_MODE])
+        asymmetric = mode is ControlMode.ASYMMETRIC_SINGLE_STEP
         return GateConfig(
             device_id=device_id or uuid4().hex,
             name=str(data[CONF_NAME]),
-            control_mode=ControlMode(data[CONF_CONTROL_MODE]),
+            control_mode=mode,
             step_source=cls._optional_source(data, CONF_STEP_SOURCE),
             open_source=cls._optional_source(data, CONF_OPEN_SOURCE),
             close_source=cls._optional_source(data, CONF_CLOSE_SOURCE),
@@ -490,18 +510,31 @@ class VirtualDevicesConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             opening_margin_ms=int(data[CONF_OPENING_MARGIN_MS]),
             closing_margin_ms=int(data[CONF_CLOSING_MARGIN_MS]),
             pulse_duration_ms=int(data[CONF_PULSE_DURATION_MS]),
-            hold_duration_ms=int(data[CONF_HOLD_DURATION_MS]),
-            minimum_command_interval_ms=int(data[CONF_MINIMUM_COMMAND_INTERVAL_MS]),
-            direction_change_delay_ms=int(data[CONF_DIRECTION_CHANGE_DELAY_MS]),
-            pulse_interval_ms=int(data[CONF_PULSE_INTERVAL_MS]),
-            pulse_count=int(data[CONF_PULSE_COUNT]),
-            stop_strategy=StopStrategyType(data[CONF_STOP_STRATEGY]),
-            direction_change_strategy=DirectionChangeStrategyType(
-                data[CONF_DIRECTION_CHANGE_STRATEGY]
+            hold_duration_ms=int(
+                data.get(CONF_HOLD_DURATION_MS, DEFAULT_HOLD_DURATION_MS)
             ),
-            repeated_open_policy=RepeatedCommandPolicy(data[CONF_REPEATED_OPEN_POLICY]),
+            minimum_command_interval_ms=int(data[CONF_MINIMUM_COMMAND_INTERVAL_MS]),
+            direction_change_delay_ms=int(
+                data.get(
+                    CONF_DIRECTION_CHANGE_DELAY_MS,
+                    DEFAULT_DIRECTION_CHANGE_DELAY_MS,
+                )
+            ),
+            pulse_interval_ms=int(data[CONF_PULSE_INTERVAL_MS]),
+            pulse_count=2 if asymmetric else int(data[CONF_PULSE_COUNT]),
+            stop_strategy=StopStrategyType.UNSUPPORTED
+            if asymmetric
+            else StopStrategyType(data[CONF_STOP_STRATEGY]),
+            direction_change_strategy=DirectionChangeStrategyType.UNSUPPORTED
+            if asymmetric
+            else DirectionChangeStrategyType(data[CONF_DIRECTION_CHANGE_STRATEGY]),
+            repeated_open_policy=RepeatedCommandPolicy.IGNORE
+            if asymmetric
+            else RepeatedCommandPolicy(data[CONF_REPEATED_OPEN_POLICY]),
             repeated_close_policy=RepeatedCommandPolicy(
-                data[CONF_REPEATED_CLOSE_POLICY]
+                RepeatedCommandPolicy.IGNORE.value
+                if asymmetric
+                else data[CONF_REPEATED_CLOSE_POLICY]
             ),
         )
 

@@ -51,10 +51,14 @@ class VirtualGateCoverEntity(CoverEntity):
             manufacturer="Virtual Devices",
             model="Virtual Gate",
         )
+
+    @property
+    def supported_features(self) -> CoverEntityFeature:
+        """Expose STOP only when it is safe in the current cached state."""
         features = CoverEntityFeature.OPEN | CoverEntityFeature.CLOSE
         if self._controller.supports_stop:
             features |= CoverEntityFeature.STOP
-        self._attr_supported_features = features
+        return features
 
     @property
     def available(self) -> bool:

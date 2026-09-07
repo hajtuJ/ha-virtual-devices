@@ -14,9 +14,13 @@ from custom_components.virtual_devices.gate import (
     GateConfig,
     GateController,
     GateDirection,
+    GateEffectType,
+    GateEndpoint,
     GateEvent,
     GateEventType,
+    GateLimitConfig,
     GatePositionEstimator,
+    GateProblem,
     GateSnapshot,
     GateState,
     SourceRef,
@@ -30,12 +34,16 @@ class FakeActions:
     """Record physical actions and allow deterministic blocking."""
 
     available: bool = True
+    availability: list[bool] = field(default_factory=list)
     calls: list[tuple[str, str]] = field(default_factory=list)
     activated: asyncio.Event = field(default_factory=asyncio.Event)
+    pressed: asyncio.Event = field(default_factory=asyncio.Event)
+    fail_press_number: int | None = None
+    press_attempts: int = 0
 
     async def async_is_available(self, source: SourceRef) -> bool:
         del source
-        return self.available
+        return self.availability.pop(0) if self.availability else self.available
 
     async def async_activate(self, source: SourceRef) -> None:
         self.calls.append(("activate", source.entity_id))
@@ -45,7 +53,11 @@ class FakeActions:
         self.calls.append(("deactivate", source.entity_id))
 
     async def async_press(self, source: SourceRef) -> None:
+        self.press_attempts += 1
         self.calls.append(("press", source.entity_id))
+        self.pressed.set()
+        if self.press_attempts == self.fail_press_number:
+            raise RuntimeError("press failed")
 
 
 def button_config(**changes: object) -> GateConfig:
@@ -55,6 +67,26 @@ def button_config(**changes: object) -> GateConfig:
         "name": "Gate",
         "control_mode": ControlMode.SINGLE_STEP,
         "step_source": SourceRef("button.gate", ControlActionType.BUTTON),
+        "minimum_command_interval_ms": 0,
+    }
+    values.update(changes)
+    return GateConfig(**values)  # type: ignore[arg-type]
+
+
+def asymmetric_config(
+    action_type: ControlActionType = ControlActionType.BUTTON,
+    **changes: object,
+) -> GateConfig:
+    """Return the fixed asymmetric profile with its required CLOSED limit."""
+    entity_id = f"{action_type.value}.gate"
+    values: dict[str, object] = {
+        "device_id": "asymmetric-gate-id",
+        "name": "Asymmetric Gate",
+        "control_mode": ControlMode.ASYMMETRIC_SINGLE_STEP,
+        "step_source": SourceRef(entity_id, action_type),
+        "closed_limit": GateLimitConfig("binary_sensor.gate_closed"),
+        "pulse_duration_ms": 1,
+        "pulse_interval_ms": 1,
         "minimum_command_interval_ms": 0,
     }
     values.update(changes)
@@ -235,3 +267,293 @@ async def test_controller_executes_configured_reversal_sequence(
     assert controller.snapshot.state is GateState.CLOSING
     assert len(actions.calls) == expected_presses
     assert all(action == "press" for action, _entity_id in actions.calls)
+
+
+@pytest.mark.parametrize(
+    ("initial", "command", "expected_presses", "expected_state"),
+    [
+        (
+            GateSnapshot(state=GateState.CLOSED, estimated_position=0),
+            GateCommand.OPEN,
+            1,
+            GateState.OPENING,
+        ),
+        (
+            GateSnapshot(state=GateState.OPEN, estimated_position=100),
+            GateCommand.CLOSE,
+            1,
+            GateState.CLOSING,
+        ),
+        (
+            GateSnapshot(
+                state=GateState.OPENING,
+                current_direction=GateDirection.OPENING,
+                last_direction=GateDirection.OPENING,
+                estimated_position=40,
+            ),
+            GateCommand.CLOSE,
+            2,
+            GateState.CLOSING,
+        ),
+        (
+            GateSnapshot(
+                state=GateState.CLOSING,
+                current_direction=GateDirection.CLOSING,
+                last_direction=GateDirection.CLOSING,
+                estimated_position=40,
+            ),
+            GateCommand.OPEN,
+            1,
+            GateState.OPENING,
+        ),
+        (
+            GateSnapshot(
+                state=GateState.STOPPED,
+                last_direction=GateDirection.OPENING,
+                estimated_position=40,
+            ),
+            GateCommand.OPEN,
+            2,
+            GateState.OPENING,
+        ),
+        (
+            GateSnapshot(
+                state=GateState.STOPPED,
+                last_direction=GateDirection.OPENING,
+                estimated_position=40,
+            ),
+            GateCommand.CLOSE,
+            1,
+            GateState.CLOSING,
+        ),
+    ],
+)
+async def test_asymmetric_button_profile_executes_exact_pulse_count(
+    initial: GateSnapshot,
+    command: GateCommand,
+    expected_presses: int,
+    expected_state: GateState,
+) -> None:
+    actions = FakeActions()
+    controller = GateController(
+        asymmetric_config(pulse_interval_ms=0),
+        actions,
+        initial_snapshot=initial,
+    )
+
+    await controller.async_command(command)
+
+    assert actions.calls == [("press", "button.gate")] * expected_presses
+    assert controller.snapshot.state is expected_state
+
+
+async def test_asymmetric_switch_double_pulse_is_ordered_and_deactivated() -> None:
+    actions = FakeActions()
+    controller = GateController(
+        asymmetric_config(ControlActionType.SWITCH, pulse_interval_ms=0),
+        actions,
+        initial_snapshot=GateSnapshot(
+            state=GateState.OPENING,
+            current_direction=GateDirection.OPENING,
+            last_direction=GateDirection.OPENING,
+        ),
+    )
+
+    await controller.async_close()
+
+    assert actions.calls == [
+        ("activate", "switch.gate"),
+        ("deactivate", "switch.gate"),
+        ("activate", "switch.gate"),
+        ("deactivate", "switch.gate"),
+    ]
+    assert controller.snapshot.state is GateState.CLOSING
+
+
+async def test_asymmetric_double_pulse_uses_configured_interval() -> None:
+    controller = GateController(
+        asymmetric_config(pulse_interval_ms=725),
+        FakeActions(),
+        initial_snapshot=GateSnapshot(
+            state=GateState.OPENING,
+            current_direction=GateDirection.OPENING,
+            last_direction=GateDirection.OPENING,
+        ),
+    )
+    transition = controller._machine.transition(
+        controller.snapshot, GateEvent(GateEventType.COMMAND_CLOSE)
+    )
+    command_effects = tuple(
+        effect
+        for effect in transition.effects
+        if effect.type is GateEffectType.EXECUTE_STEP_PULSES
+    )
+    sequence = controller._sequence_for_effects(command_effects, controller.snapshot)
+
+    assert [step.type.value for step in sequence.steps] == [
+        "press",
+        "delay",
+        "press",
+    ]
+    assert sequence.steps[1].duration_ms == 725
+
+
+async def test_asymmetric_stop_is_rejected_while_closing_without_action() -> None:
+    actions = FakeActions()
+    controller = GateController(
+        asymmetric_config(),
+        actions,
+        initial_snapshot=GateSnapshot(
+            state=GateState.CLOSING,
+            current_direction=GateDirection.CLOSING,
+            last_direction=GateDirection.CLOSING,
+        ),
+    )
+
+    with pytest.raises(ServiceValidationError):
+        await controller.async_stop()
+
+    assert actions.calls == []
+    assert controller.snapshot.state is GateState.CLOSING
+
+
+@pytest.mark.parametrize(
+    "snapshot",
+    [
+        GateSnapshot(),
+        GateSnapshot(state=GateState.UNKNOWN_MOVING),
+        GateSnapshot(state=GateState.STOPPED),
+    ],
+)
+async def test_asymmetric_unknown_phase_is_rejected_without_action(
+    snapshot: GateSnapshot,
+) -> None:
+    actions = FakeActions()
+    controller = GateController(asymmetric_config(), actions, initial_snapshot=snapshot)
+
+    with pytest.raises(ServiceValidationError):
+        await controller.async_open()
+
+    assert actions.calls == []
+    assert controller.snapshot == snapshot
+
+
+async def test_asymmetric_partial_sequence_failure_becomes_unknown() -> None:
+    actions = FakeActions(availability=[True, True, True, False])
+    controller = GateController(
+        asymmetric_config(pulse_interval_ms=0),
+        actions,
+        initial_snapshot=GateSnapshot(
+            state=GateState.OPENING,
+            current_direction=GateDirection.OPENING,
+            last_direction=GateDirection.OPENING,
+            estimated_position=40,
+        ),
+    )
+
+    with pytest.raises(ServiceValidationError):
+        await controller.async_close()
+
+    assert actions.calls == [("press", "button.gate")]
+    assert controller.snapshot.state is GateState.UNKNOWN
+    assert controller.snapshot.current_direction is GateDirection.UNKNOWN
+    assert controller.snapshot.problem is GateProblem.SOURCE_UNAVAILABLE
+    assert controller.snapshot.last_command is GateCommand.CLOSE
+
+    await controller.async_handle_limit(GateEndpoint.CLOSED, raw_is_on=True)
+    recovered = controller.snapshot
+    assert recovered.state is GateState.CLOSED
+    assert recovered.problem is GateProblem.SOURCE_UNAVAILABLE
+    await controller.async_handle_event(GateEvent(GateEventType.SOURCE_AVAILABLE))
+    source_recovered = controller.snapshot
+    assert source_recovered.problem is GateProblem.NONE
+
+
+async def test_asymmetric_action_exception_becomes_sequence_failure() -> None:
+    actions = FakeActions(fail_press_number=2)
+    controller = GateController(
+        asymmetric_config(pulse_interval_ms=0),
+        actions,
+        initial_snapshot=GateSnapshot(
+            state=GateState.OPENING,
+            current_direction=GateDirection.OPENING,
+            last_direction=GateDirection.OPENING,
+            estimated_position=40,
+        ),
+    )
+
+    with pytest.raises(ServiceValidationError):
+        await controller.async_close()
+
+    assert actions.calls == [("press", "button.gate")] * 2
+    assert controller.snapshot.state is GateState.UNKNOWN
+    assert controller.snapshot.problem is GateProblem.COMMAND_SEQUENCE_FAILED
+
+
+async def test_asymmetric_preflight_failure_preserves_known_state() -> None:
+    actions = FakeActions(available=False)
+    original = GateSnapshot(state=GateState.CLOSED, estimated_position=0)
+    controller = GateController(asymmetric_config(), actions, initial_snapshot=original)
+
+    with pytest.raises(ServiceValidationError):
+        await controller.async_open()
+
+    assert actions.calls == []
+    assert controller.snapshot.state is GateState.CLOSED
+    assert controller.snapshot.problem is GateProblem.SOURCE_UNAVAILABLE
+
+
+async def test_asymmetric_shutdown_after_first_pulse_marks_state_unknown() -> None:
+    actions = FakeActions()
+    controller = GateController(
+        asymmetric_config(pulse_interval_ms=60_000),
+        actions,
+        initial_snapshot=GateSnapshot(
+            state=GateState.OPENING,
+            current_direction=GateDirection.OPENING,
+            last_direction=GateDirection.OPENING,
+            estimated_position=40,
+        ),
+    )
+
+    command = asyncio.create_task(controller.async_close())
+    await actions.pressed.wait()
+    await controller.async_shutdown()
+
+    with pytest.raises(asyncio.CancelledError):
+        await command
+    assert actions.calls == [("press", "button.gate")]
+    assert controller.snapshot.state is GateState.UNKNOWN
+    assert controller.snapshot.problem is GateProblem.COMMAND_SEQUENCE_FAILED
+
+
+async def test_asymmetric_switch_cancellation_deactivates_relay_and_is_unknown() -> (
+    None
+):
+    actions = FakeActions()
+    controller = GateController(
+        asymmetric_config(
+            ControlActionType.SWITCH,
+            pulse_duration_ms=60_000,
+            pulse_interval_ms=0,
+        ),
+        actions,
+        initial_snapshot=GateSnapshot(
+            state=GateState.OPENING,
+            current_direction=GateDirection.OPENING,
+            last_direction=GateDirection.OPENING,
+        ),
+    )
+
+    command = asyncio.create_task(controller.async_close())
+    await actions.activated.wait()
+    await controller.async_shutdown()
+
+    with pytest.raises(asyncio.CancelledError):
+        await command
+    assert actions.calls == [
+        ("activate", "switch.gate"),
+        ("deactivate", "switch.gate"),
+    ]
+    assert controller.snapshot.state is GateState.UNKNOWN
+    assert controller.snapshot.problem is GateProblem.COMMAND_SEQUENCE_FAILED

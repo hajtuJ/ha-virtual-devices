@@ -2,6 +2,8 @@
 
 from .command_executor import (
     CommandExecutorConfig,
+    CommandSequenceCancelledError,
+    CommandSequenceError,
     ConcurrentCommandPolicy,
     GateCommandExecutor,
     SourceActions,
@@ -42,6 +44,8 @@ __all__ = [
     "CONFIG_VERSION",
     "CommandExecutorConfig",
     "CommandSequence",
+    "CommandSequenceCancelledError",
+    "CommandSequenceError",
     "CommandStep",
     "CommandStepType",
     "ConcurrentCommandPolicy",

@@ -10,6 +10,7 @@ from custom_components.virtual_devices.gate import (
     ControlActionType,
     ControlMode,
     GateConfig,
+    GateLimitConfig,
     SourceRef,
 )
 from pytest_homeassistant_custom_component.common import (  # type: ignore[import-untyped]
@@ -56,3 +57,26 @@ async def test_diagnostics_are_useful_and_redact_names_and_entity_ids(
     assert "Private Driveway" not in rendered
     assert "button.private_driveway" not in rendered
     assert "diagnostic-id" not in rendered
+
+
+async def test_asymmetric_diagnostics_report_effective_directional_profile(
+    hass: HomeAssistant,
+) -> None:
+    config = GateConfig(
+        device_id="asymmetric-diagnostic-id",
+        name="Asymmetric Gate",
+        control_mode=ControlMode.ASYMMETRIC_SINGLE_STEP,
+        step_source=SourceRef("button.asymmetric", ControlActionType.BUTTON),
+        closed_limit=GateLimitConfig("binary_sensor.asymmetric_closed"),
+    )
+    entry = await setup_gate(hass, config)
+
+    diagnostics = await async_get_config_entry_diagnostics(hass, entry)
+
+    assert diagnostics["config"]["control_profile"] == "asymmetric_single_step"
+    assert diagnostics["config"]["effective_directional_behavior"] == {
+        "stop_while_opening": "one_pulse",
+        "stop_while_closing": "unsupported",
+        "opening_to_closing_pulses": 2,
+        "closing_to_opening_pulses": 1,
+    }

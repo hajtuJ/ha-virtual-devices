@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+import pytest
 from custom_components.virtual_devices.const import DOMAIN
 from custom_components.virtual_devices.gate import (
     ControlActionType,
     ControlMode,
     GateConfig,
+    GateLimitConfig,
     SourceRef,
     StopStrategyType,
 )
@@ -16,10 +18,12 @@ from homeassistant.components.cover import CoverEntityFeature
 from homeassistant.const import (
     ATTR_DEVICE_CLASS,
     ATTR_SUPPORTED_FEATURES,
+    STATE_CLOSING,
     STATE_OPENING,
     STATE_UNAVAILABLE,
     STATE_UNKNOWN,
 )
+from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import (  # type: ignore[import-untyped]
@@ -165,3 +169,82 @@ async def test_stop_feature_is_dynamic_and_two_devices_are_distinct(
     assert first_opening.state == STATE_OPENING
     assert second_opening.state == STATE_OPENING
     assert calls == ["button.first", "button.second_open"]
+
+
+async def test_asymmetric_stop_feature_tracks_opening_only(
+    hass: HomeAssistant,
+) -> None:
+    """The frontend never offers a physically impossible STOP while closing."""
+    calls: list[str] = []
+
+    async def record(call: ServiceCall) -> None:
+        calls.append(str(call.data["entity_id"]))
+
+    hass.services.async_register("button", "press", record)
+    hass.states.async_set("binary_sensor.asymmetric_closed", "on")
+    config = GateConfig(
+        device_id="asymmetric-id",
+        name="Asymmetric Gate",
+        control_mode=ControlMode.ASYMMETRIC_SINGLE_STEP,
+        step_source=SourceRef("button.asymmetric", ControlActionType.BUTTON),
+        closed_limit=GateLimitConfig("binary_sensor.asymmetric_closed", debounce_ms=0),
+        minimum_command_interval_ms=0,
+        pulse_interval_ms=0,
+    )
+    entry = await setup_gate(hass, config)
+    entity_id = "cover.asymmetric_gate"
+
+    await hass.services.async_call(
+        "cover", "open_cover", {"entity_id": entity_id}, blocking=True
+    )
+    opening = hass.states.get(entity_id)
+    assert opening is not None
+    assert opening.state == STATE_OPENING
+    assert opening.attributes[ATTR_SUPPORTED_FEATURES] & int(CoverEntityFeature.STOP)
+
+    await hass.services.async_call(
+        "cover", "stop_cover", {"entity_id": entity_id}, blocking=True
+    )
+    stopped = hass.states.get(entity_id)
+    assert stopped is not None
+    assert not stopped.attributes[ATTR_SUPPORTED_FEATURES] & int(
+        CoverEntityFeature.STOP
+    )
+
+    await hass.services.async_call(
+        "cover", "close_cover", {"entity_id": entity_id}, blocking=True
+    )
+    closing = hass.states.get(entity_id)
+    assert closing is not None
+    assert closing.state == STATE_CLOSING
+    assert not closing.attributes[ATTR_SUPPORTED_FEATURES] & int(
+        CoverEntityFeature.STOP
+    )
+
+    with pytest.raises(ServiceValidationError):
+        await entry.runtime_data.controller.async_stop()
+    assert calls == ["button.asymmetric"] * 3
+
+
+async def test_asymmetric_external_opening_exposes_stop(
+    hass: HomeAssistant,
+) -> None:
+    """Releasing CLOSED is sufficient evidence for the safe opening-only STOP."""
+    hass.states.async_set("binary_sensor.external_closed", "on")
+    config = GateConfig(
+        device_id="external-asymmetric-id",
+        name="External Asymmetric Gate",
+        control_mode=ControlMode.ASYMMETRIC_SINGLE_STEP,
+        step_source=SourceRef("button.external_asymmetric", ControlActionType.BUTTON),
+        closed_limit=GateLimitConfig("binary_sensor.external_closed", debounce_ms=0),
+        minimum_command_interval_ms=0,
+    )
+    await setup_gate(hass, config)
+
+    hass.states.async_set("binary_sensor.external_closed", "off")
+    await hass.async_block_till_done()
+
+    state = hass.states.get("cover.external_asymmetric_gate")
+    assert state is not None
+    assert state.state == STATE_OPENING
+    assert state.attributes[ATTR_SUPPORTED_FEATURES] & int(CoverEntityFeature.STOP)

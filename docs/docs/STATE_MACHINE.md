@@ -196,6 +196,26 @@ last_direction = CLOSING
 
 Strategies must receive both current state and last direction.
 
+### 8.1 Extended asymmetric step-by-step profile
+
+The fixed asymmetric profile uses one source and requires the CLOSED limit:
+
+```text
+CLOSED + OPEN              -> pulse(1) -> OPENING
+OPEN + CLOSE               -> pulse(1) -> CLOSING
+OPENING + STOP             -> pulse(1) -> STOPPED
+OPENING + CLOSE            -> pulse(2) -> CLOSING
+CLOSING + OPEN             -> pulse(1) -> OPENING
+CLOSING + STOP             -> reject, no effect
+STOPPED(OPENING) + CLOSE   -> pulse(1) -> CLOSING
+STOPPED(OPENING) + OPEN    -> pulse(2) -> OPENING
+```
+
+Repeated commands are ignored. UNKNOWN, UNKNOWN_MOVING, ERROR, and STOPPED without
+`last_direction=OPENING` reject movement because the next physical step cannot be
+predicted. A partially attempted sequence transitions to UNKNOWN with a problem;
+only authoritative endpoint evidence re-establishes the logical phase.
+
 ## 9. Sensor priority
 
 Physical endpoint sensors override time estimation.
@@ -324,3 +344,5 @@ Verify the current Home Assistant `CoverEntity` behavior before final implementa
 9. HA restart never starts movement.
 10. unsupported STOP is not exposed as supported.
 11. cancellation of pulse/HOLD must deactivate source control.
+12. asymmetric STOP is exposed only while OPENING.
+13. a partially attempted asymmetric sequence must not commit its target direction.

@@ -2,6 +2,7 @@
 
 import pytest
 from custom_components.virtual_devices.gate import (
+    ControlMode,
     DirectionChangeStrategyType,
     GateCommand,
     GateDirection,
@@ -53,7 +54,6 @@ def test_normal_command_starts_motion(
     result = GateStateMachine(GateStateMachineConfig()).transition(
         initial, GateEvent(event_type)
     )
-
     assert result.snapshot.state is expected_state
     assert result.snapshot.current_direction is expected_direction
     assert result.snapshot.last_direction is expected_direction
@@ -62,6 +62,141 @@ def test_normal_command_starts_motion(
         GateEffectType.START_MOVEMENT_TIMER,
         GateEffectType.STATE_CHANGED,
     )
+
+
+def asymmetric_machine(*, open_limit: bool = False) -> GateStateMachine:
+    """Create the fixed asymmetric profile with its required CLOSED endpoint."""
+    return GateStateMachine(
+        GateStateMachineConfig(
+            control_mode=ControlMode.ASYMMETRIC_SINGLE_STEP,
+            closed_limit=LimitSensorConfig(),
+            open_limit=LimitSensorConfig() if open_limit else None,
+        )
+    )
+
+
+@pytest.mark.parametrize(
+    ("initial", "event_type", "expected_state", "pulse_count"),
+    [
+        (
+            GateSnapshot(state=GateState.CLOSED, estimated_position=0),
+            GateEventType.COMMAND_OPEN,
+            GateState.OPENING,
+            1,
+        ),
+        (
+            GateSnapshot(state=GateState.OPEN, estimated_position=100),
+            GateEventType.COMMAND_CLOSE,
+            GateState.CLOSING,
+            1,
+        ),
+        (
+            GateSnapshot(
+                state=GateState.OPENING,
+                current_direction=GateDirection.OPENING,
+                last_direction=GateDirection.OPENING,
+                estimated_position=40,
+            ),
+            GateEventType.COMMAND_CLOSE,
+            GateState.CLOSING,
+            2,
+        ),
+        (
+            GateSnapshot(
+                state=GateState.CLOSING,
+                current_direction=GateDirection.CLOSING,
+                last_direction=GateDirection.CLOSING,
+                estimated_position=40,
+            ),
+            GateEventType.COMMAND_OPEN,
+            GateState.OPENING,
+            1,
+        ),
+        (
+            GateSnapshot(
+                state=GateState.STOPPED,
+                last_direction=GateDirection.OPENING,
+                estimated_position=40,
+            ),
+            GateEventType.COMMAND_CLOSE,
+            GateState.CLOSING,
+            1,
+        ),
+        (
+            GateSnapshot(
+                state=GateState.STOPPED,
+                last_direction=GateDirection.OPENING,
+                estimated_position=40,
+            ),
+            GateEventType.COMMAND_OPEN,
+            GateState.OPENING,
+            2,
+        ),
+    ],
+)
+def test_asymmetric_profile_emits_directional_pulse_counts(
+    initial: GateSnapshot,
+    event_type: GateEventType,
+    expected_state: GateState,
+    pulse_count: int,
+) -> None:
+    """Every supported semantic command maps to the exact physical cycle."""
+    result = asymmetric_machine().transition(initial, GateEvent(event_type))
+
+    assert result.snapshot.state is expected_state
+    assert result.effects[0].type is GateEffectType.EXECUTE_STEP_PULSES
+    assert result.effects[0].pulse_count == pulse_count
+
+
+def test_asymmetric_stop_is_supported_only_while_opening() -> None:
+    """A closing pulse reverses the hardware and must never be modeled as STOP."""
+    opening = GateSnapshot(
+        state=GateState.OPENING,
+        current_direction=GateDirection.OPENING,
+        last_direction=GateDirection.OPENING,
+        estimated_position=45,
+    )
+    stopped = asymmetric_machine().transition(
+        opening, GateEvent(GateEventType.COMMAND_STOP)
+    )
+    assert stopped.snapshot.state is GateState.STOPPED
+    assert stopped.snapshot.last_direction is GateDirection.OPENING
+    assert stopped.effects[0].pulse_count == 1
+
+    closing = GateSnapshot(
+        state=GateState.CLOSING,
+        current_direction=GateDirection.CLOSING,
+        last_direction=GateDirection.CLOSING,
+    )
+    rejected = asymmetric_machine().transition(
+        closing, GateEvent(GateEventType.COMMAND_STOP)
+    )
+    assert rejected.snapshot == closing
+    assert rejected.effects == ()
+
+
+@pytest.mark.parametrize(
+    "snapshot",
+    [
+        GateSnapshot(),
+        GateSnapshot(state=GateState.UNKNOWN_MOVING),
+        GateSnapshot(state=GateState.ERROR),
+        GateSnapshot(state=GateState.STOPPED),
+        GateSnapshot(
+            state=GateState.STOPPED,
+            last_direction=GateDirection.CLOSING,
+        ),
+    ],
+)
+def test_asymmetric_unknown_phase_never_emits_a_physical_effect(
+    snapshot: GateSnapshot,
+) -> None:
+    """An unpredictable controller phase cannot be recovered by guessing."""
+    result = asymmetric_machine().transition(
+        snapshot, GateEvent(GateEventType.COMMAND_OPEN)
+    )
+    assert result.snapshot == snapshot
+    assert result.effects == ()
 
 
 @pytest.mark.parametrize(
@@ -277,6 +412,35 @@ def test_timeout_never_fakes_a_configured_endpoint(
     )
     assert result.snapshot.state is endpoint
     assert result.snapshot.problem is problem
+
+
+@pytest.mark.parametrize(
+    ("with_open_limit", "movement", "expected_state", "expected_problem"),
+    [
+        (False, GateState.OPENING, GateState.OPEN, GateProblem.NONE),
+        (False, GateState.CLOSING, GateState.ERROR, GateProblem.CLOSING_TIMEOUT),
+        (True, GateState.OPENING, GateState.ERROR, GateProblem.OPENING_TIMEOUT),
+        (True, GateState.CLOSING, GateState.ERROR, GateProblem.CLOSING_TIMEOUT),
+    ],
+)
+def test_asymmetric_endpoint_matrix_controls_timeout_authority(
+    with_open_limit: bool,
+    movement: GateState,
+    expected_state: GateState,
+    expected_problem: GateProblem,
+) -> None:
+    direction = (
+        GateDirection.OPENING
+        if movement is GateState.OPENING
+        else GateDirection.CLOSING
+    )
+    result = asymmetric_machine(open_limit=with_open_limit).transition(
+        GateSnapshot(state=movement, current_direction=direction),
+        GateEvent(GateEventType.MOVEMENT_TIMEOUT),
+    )
+
+    assert result.snapshot.state is expected_state
+    assert result.snapshot.problem is expected_problem
 
 
 def test_active_state_inversion_is_normalized() -> None:

@@ -150,7 +150,10 @@ class GateConfig:
 
     def _validate_sources(self) -> None:
         """Enforce the selected controller topology and output uniqueness."""
-        if self.control_mode is ControlMode.SINGLE_STEP:
+        if self.control_mode in (
+            ControlMode.SINGLE_STEP,
+            ControlMode.ASYMMETRIC_SINGLE_STEP,
+        ):
             valid = self.step_source is not None and all(
                 source is None
                 for source in (self.open_source, self.close_source, self.stop_source)
@@ -189,6 +192,11 @@ class GateConfig:
             sensor_ids.append(self.obstacle_source)
         if len(sensor_ids) != len(set(sensor_ids)):
             raise GateConfigError(CONF_OPEN_LIMIT, "duplicate_sensor")
+        if (
+            self.control_mode is ControlMode.ASYMMETRIC_SINGLE_STEP
+            and self.closed_limit is None
+        ):
+            raise GateConfigError(CONF_CLOSED_LIMIT, "asymmetric_closed_limit_required")
 
     def _validate_timings(self) -> None:
         """Validate travel, pulse, margin, debounce, and interval values."""
@@ -216,6 +224,17 @@ class GateConfig:
 
     def _validate_strategies(self) -> None:
         """Ensure each strategy can be executed by the configured topology."""
+        if self.control_mode is ControlMode.ASYMMETRIC_SINGLE_STEP:
+            if (
+                self.stop_strategy is not StopStrategyType.UNSUPPORTED
+                or self.direction_change_strategy
+                is not DirectionChangeStrategyType.UNSUPPORTED
+                or self.repeated_open_policy is not RepeatedCommandPolicy.IGNORE
+                or self.repeated_close_policy is not RepeatedCommandPolicy.IGNORE
+                or self.pulse_count != 2
+            ):
+                raise GateConfigError(CONF_CONTROL_MODE, "asymmetric_profile_is_fixed")
+            return
         if self.stop_strategy is StopStrategyType.CUSTOM_SEQUENCE:
             raise GateConfigError(CONF_STOP_STRATEGY, "custom_sequence_not_supported")
         if (

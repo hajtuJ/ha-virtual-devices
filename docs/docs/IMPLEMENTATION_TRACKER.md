@@ -7,7 +7,7 @@ been completed and how it was verified.
 
 ## Current snapshot
 
-- **Updated:** 2026-08-31
+- **Updated:** 2026-09-07
 - **Release target:** MVP / `0.1.0`
 - **Overall status:** `IN_PROGRESS`
 - **Checklist progress:** 99 / 104 tasks (95%)
@@ -381,6 +381,9 @@ and release evidence is linked below.
 - 2026-08-30 — `CHANGELOG.md` and the release test record define the 0.1.0 feature,
   safety, manual test, hardware test, and publication gates. The simulated HA server
   started, but browser loopback policy prevented completing the native UI exercise.
+- 2026-09-07 — the extended asymmetric step-by-step profile adds fixed direction-
+  aware 1/2-pulse behavior, opening-only STOP, required CLOSED/optional OPEN limits,
+  and conservative UNKNOWN recovery after partially attempted sequences.
 
 ## MVP acceptance checklist
 
@@ -462,6 +465,10 @@ available. Do not replace failed results; add a later passing entry.
 | 2026-08-31 | 10 | GitHub Actions Test run 33386698170 | PASS | Ruff, formatting, strict mypy, and all 116 tests passed for commit `bc84b0f`. |
 | 2026-08-31 | 2, 10 | GitHub Actions Validate run 33386698197 | PARTIAL | hassfest job 99470823810 passed; HACS job 99470823983 could not read manifests from the confirmed private repository. |
 
+| 2026-09-07 | 4–10 | `.venv/bin/pytest -q` | PASS | All 155 tests passed, including asymmetric button/switch pulse counts, direction-specific STOP/reversal, one/two-limit timeout authority, partial failure, cancellation cleanup, Config Flow, cover features, and diagnostics. |
+| 2026-09-07 | 1–10 | `.venv/bin/ruff check custom_components tests`, `.venv/bin/ruff format --check custom_components tests`, and `.venv/bin/mypy custom_components tests` | PASS | All project Python files pass lint, formatting, and strict typing checks. |
+| 2026-09-07 | 2, 6, 9 | `docker run --rm -v "$PWD:/github/workspace" ghcr.io/home-assistant/hassfest:latest` | PASS | One integration, zero invalid integrations; manifest, Config Flow, JSON, and synchronized translations validated. |
+
 ## Progress change log
 
 | Date | Change | Progress |
@@ -477,3 +484,4 @@ available. Do not replace failed results; add a later passing entry.
 | 2026-08-30 | Completed observation, estimation, semantic restore, diagnostic entities, and redacted diagnostics. | 84 / 104 (80%) |
 | 2026-08-30 | Completed safe reconfiguration, migration, synchronized translations, and user documentation. | 93 / 104 (89%) |
 | 2026-08-30 | Completed automated release hardening, CI coverage, safety audit, and 0.1.0 release notes. | 99 / 104 (95%) |
+| 2026-09-07 | Added and verified the extended asymmetric step-by-step controller profile; release-gate count is unchanged. | 99 / 104 (95%) |

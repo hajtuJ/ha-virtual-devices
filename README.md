@@ -51,6 +51,9 @@ gates can coexist without sharing listeners, timers, state, or command queues.
 
 - **Single step-by-step** — one control cycles through behavior provided by the
   physical controller. Configure STOP/reversal only when its sequence is known.
+- **Extended step-by-step (asymmetric)** — one control where a pulse stops while
+  opening but immediately reverses while closing. It requires a CLOSED endpoint;
+  an OPEN endpoint is optional.
 - **Separate OPEN/CLOSE** — distinct direction controls and no dedicated STOP input.
 - **Separate OPEN/CLOSE/STOP** — distinct direction and STOP controls.
 
@@ -60,7 +63,9 @@ outputs are interlocked and physical sequences are serialized.
 
 ## Endpoint and obstacle sensors
 
-You can configure zero, one, or two endpoint sensors. Each endpoint has its own:
+You can configure zero, one, or two endpoint sensors. Extended asymmetric
+step-by-step is the exception: it requires CLOSED and optionally accepts OPEN. Each
+endpoint has its own:
 
 - binary sensor entity;
 - active-state polarity (normal or inverted);
@@ -101,6 +106,13 @@ physical controller.
 
 Incorrect strategy selection can cause unexpected physical behavior. Confirm the
 controller manual and test each sequence with the motor disconnected.
+
+The asymmetric profile fixes the safety-critical cycle rather than exposing generic
+strategy selectors: STOP is available only while opening, OPENING→CLOSING uses two
+pulses, and CLOSING→OPEN uses one. From a stop reached while opening, CLOSE uses one
+pulse and OPEN uses two. Commands are rejected when the controller phase is unknown.
+If a physical action starts but its sequence cannot finish, the logical state becomes
+unknown and no pulse is retried automatically.
 
 ## External movement and restart behavior
 

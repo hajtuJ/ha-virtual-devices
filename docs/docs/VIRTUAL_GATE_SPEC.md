@@ -68,7 +68,33 @@ STOPPED + pulse -> OPENING
 
 The exact behavior must be configurable.
 
-### 3.2 Separate OPEN / CLOSE
+### 3.2 Extended asymmetric step-by-step
+
+One source control with a fixed physical cycle:
+
+```text
+CLOSED  + pulse -> OPENING
+OPENING + pulse -> STOPPED
+STOPPED after OPENING + pulse -> CLOSING
+CLOSING + pulse -> OPENING
+```
+
+This mode requires a CLOSED limit and optionally accepts an OPEN limit. Its semantic
+commands are fixed for safety:
+
+```text
+OPENING + CLOSE -> two pulses -> CLOSING
+CLOSING + OPEN -> one pulse -> OPENING
+OPENING + STOP -> one pulse -> STOPPED
+CLOSING + STOP -> reject without a pulse
+STOPPED(last_direction=OPENING) + CLOSE -> one pulse -> CLOSING
+STOPPED(last_direction=OPENING) + OPEN -> two pulses -> OPENING
+```
+
+STOP is advertised only while the gate is opening. An unknown controller phase must
+reject movement until a configured physical endpoint establishes authority.
+
+### 3.3 Separate OPEN / CLOSE
 
 Two source controls:
 
@@ -79,11 +105,11 @@ CLOSE
 
 STOP can use another strategy.
 
-### 3.3 Separate OPEN / CLOSE / STOP
+### 3.4 Separate OPEN / CLOSE / STOP
 
 Three source controls.
 
-### 3.4 Custom strategy
+### 3.5 Custom strategy
 
 Architecture should allow custom command sequences later.
 
@@ -483,6 +509,11 @@ If a required control entity is unavailable:
 - do not execute partial movement sequences.
 
 If a non-critical diagnostic source is unavailable, the entire gate does not necessarily become unavailable.
+
+For a multi-pulse asymmetric sequence, failure before any physical action preserves
+the known logical state. Failure or cancellation after a physical action may have
+started sets the state to UNKNOWN, cancels movement timing, freezes position, and
+reports SOURCE_UNAVAILABLE or COMMAND_SEQUENCE_FAILED. No automatic retry is allowed.
 
 ## 21. Device Registry
 

@@ -47,6 +47,26 @@ OPENING + CLOSE
 CLOSING + OPEN
 ```
 
+### Extended asymmetric step-by-step
+
+Test both button and switch sources with a required CLOSED limit and optional OPEN
+limit:
+
+```text
+CLOSED + OPEN -> 1 pulse
+OPENING + STOP -> 1 pulse
+OPENING + CLOSE -> 2 pulses
+CLOSING + OPEN -> 1 pulse
+CLOSING + STOP -> reject without action
+STOPPED(OPENING) + CLOSE -> 1 pulse
+STOPPED(OPENING) + OPEN -> 2 pulses
+```
+
+Verify dynamic opening-only STOP, the configured inter-pulse delay, unknown-phase
+rejection, one/two-limit timeout behavior, and endpoint recovery. Failure before the
+first physical action preserves state; failure or cancellation after an action starts
+must enter UNKNOWN with a problem and must never retry automatically.
+
 ### Repeated commands
 
 Test:

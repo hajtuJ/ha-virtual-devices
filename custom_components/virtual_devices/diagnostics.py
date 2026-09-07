@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from .gate import ControlMode
+
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
@@ -19,6 +21,7 @@ async def async_get_config_entry_diagnostics(
     runtime = entry.runtime_data
     config = runtime.config
     snapshot = runtime.controller.snapshot
+    asymmetric = config.control_mode is ControlMode.ASYMMETRIC_SINGLE_STEP
     return {
         "config": {
             "config_version": config.config_version,
@@ -29,6 +32,17 @@ async def async_get_config_entry_diagnostics(
             "has_obstacle_source": config.obstacle_source is not None,
             "stop_strategy": config.stop_strategy.value,
             "direction_change_strategy": config.direction_change_strategy.value,
+            "control_profile": "asymmetric_single_step"
+            if asymmetric
+            else "configured_strategies",
+            "effective_directional_behavior": {
+                "stop_while_opening": "one_pulse",
+                "stop_while_closing": "unsupported",
+                "opening_to_closing_pulses": 2,
+                "closing_to_opening_pulses": 1,
+            }
+            if asymmetric
+            else None,
             "opening_time_ms": config.opening_time_ms,
             "closing_time_ms": config.closing_time_ms,
             "opening_margin_ms": config.opening_margin_ms,
