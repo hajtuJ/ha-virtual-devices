@@ -13,6 +13,8 @@ All notable changes to Virtual Devices are documented here. The project follows
   topologies backed by switch or button entities.
 - Extended asymmetric step-by-step control with direction-specific 1/2-pulse
   reversal, opening-only STOP, and one- or two-endpoint operation.
+- Explicit ON/OFF endpoint-reached selection for each configured OPEN and CLOSED
+  limit, preserved across reconfiguration.
 - Serialized pulse, bounded HOLD, STOP, reversal, and repeated-command execution.
 - Gate cover with truthful dynamic STOP support and no `SET_POSITION` capability.
 - Zero, one, or two inverted/debounced endpoint sensors plus optional obstacle input.

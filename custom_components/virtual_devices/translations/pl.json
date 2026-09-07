@@ -48,19 +48,19 @@
         "description": "Krańcówki są opcjonalne z wyjątkiem asymetrycznego trybu krok po kroku, który wymaga krańcówki CLOSED. Ich stan fizyczny ma pierwszeństwo przed estymacją czasu.",
         "data": {
           "open_limit": "Krańcówka OPEN",
-          "open_limit_active_state": "Krańcówka OPEN aktywna przy stanie on",
+          "open_limit_active_state": "Osiągnięcie OPEN sygnalizuje stan",
           "open_limit_debounce_ms": "Debounce OPEN (ms)",
           "closed_limit": "Krańcówka CLOSED",
-          "closed_limit_active_state": "Krańcówka CLOSED aktywna przy stanie on",
+          "closed_limit_active_state": "Osiągnięcie CLOSED sygnalizuje stan",
           "closed_limit_debounce_ms": "Debounce CLOSED (ms)",
           "obstacle_source": "Czujnik przeszkody"
         },
         "data_description": {
           "open_limit": "Opcjonalny binary sensor aktywny przy pełnym otwarciu.",
-          "open_limit_active_state": "Wyłącz dla czujnika normalnie zamkniętego/odwróconego.",
+          "open_limit_active_state": "Wybierz stan Home Assistant raportowany po zwarciu krańcówki OPEN i osiągnięciu pełnego otwarcia.",
           "open_limit_debounce_ms": "Czas, przez jaki stan musi pozostać stabilny.",
           "closed_limit": "Opcjonalny binary sensor aktywny przy pełnym zamknięciu.",
-          "closed_limit_active_state": "Wyłącz dla czujnika normalnie zamkniętego/odwróconego.",
+          "closed_limit_active_state": "Wybierz stan Home Assistant raportowany po zwarciu krańcówki CLOSED i osiągnięciu pełnego zamknięcia.",
           "closed_limit_debounce_ms": "Czas, przez jaki stan musi pozostać stabilny.",
           "obstacle_source": "Opcjonalny binary sensor blokujący CLOSE, gdy jest aktywny."
         }
@@ -116,6 +116,7 @@
       "duplicate_sensor": "Krańcówki i czujnik przeszkody muszą używać różnych sensorów.",
       "invalid_source_layout": "Wybrane sterowanie nie pasuje do trybu sterowania.",
       "invalid_binary_sensor": "Wybierz binary sensor.",
+      "invalid_limit_active_state": "Wybierz ON albo OFF jako stan oznaczający osiągnięcie położenia krańcowego.",
       "positive": "Wprowadź wartość większą od zera.",
       "non_negative": "Wprowadź zero lub wartość dodatnią.",
       "unsupported_version": "Ta wersja konfiguracji nie jest obsługiwana.",
@@ -135,6 +136,12 @@
     }
   },
   "selector": {
+    "limit_active_state": {
+      "options": {
+        "on": "ON — położenie osiągnięte",
+        "off": "OFF — położenie osiągnięte"
+      }
+    },
     "control_mode": {
       "options": {
         "single_step": "Pojedyncze sterowanie krok po kroku",

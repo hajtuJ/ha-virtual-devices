@@ -468,6 +468,8 @@ available. Do not replace failed results; add a later passing entry.
 | 2026-09-07 | 4–10 | `.venv/bin/pytest -q` | PASS | All 155 tests passed, including asymmetric button/switch pulse counts, direction-specific STOP/reversal, one/two-limit timeout authority, partial failure, cancellation cleanup, Config Flow, cover features, and diagnostics. |
 | 2026-09-07 | 1–10 | `.venv/bin/ruff check custom_components tests`, `.venv/bin/ruff format --check custom_components tests`, and `.venv/bin/mypy custom_components tests` | PASS | All project Python files pass lint, formatting, and strict typing checks. |
 | 2026-09-07 | 2, 6, 9 | `docker run --rm -v "$PWD:/github/workspace" ghcr.io/home-assistant/hassfest:latest` | PASS | One integration, zero invalid integrations; manifest, Config Flow, JSON, and synchronized translations validated. |
+| 2026-09-07 | 6, 9 | `.venv/bin/pytest -q` | PASS | All 156 tests passed, including explicit per-limit ON/OFF endpoint-reached selection and preservation through Reconfigure Flow. |
+| 2026-09-07 | 1–10 | Ruff, strict mypy, compileall, JSON parsing, `git diff --check`, and hassfest | PASS | Static checks passed; all project files were formatted; synchronized translations and Config Flow validated with one integration and zero invalid integrations. |
 
 ## Progress change log
 
@@ -485,3 +487,4 @@ available. Do not replace failed results; add a later passing entry.
 | 2026-08-30 | Completed safe reconfiguration, migration, synchronized translations, and user documentation. | 93 / 104 (89%) |
 | 2026-08-30 | Completed automated release hardening, CI coverage, safety audit, and 0.1.0 release notes. | 99 / 104 (95%) |
 | 2026-09-07 | Added and verified the extended asymmetric step-by-step controller profile; release-gate count is unchanged. | 99 / 104 (95%) |
+| 2026-09-07 | Replaced ambiguous limit-state toggles with explicit translated ON/OFF endpoint-reached selectors; release-gate count is unchanged. | 99 / 104 (95%) |

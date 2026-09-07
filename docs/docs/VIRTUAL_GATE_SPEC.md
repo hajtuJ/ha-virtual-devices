@@ -241,6 +241,12 @@ active_state
 debounce_ms
 ```
 
+The Config/Reconfigure Flow presents `active_state` as an explicit `ON` / `OFF`
+choice. It means the Home Assistant binary-sensor state reported when that limit
+contact is closed and its endpoint has been reached. OPEN and CLOSED limits are
+configured independently; the persisted domain value remains a boolean (`ON=true`,
+`OFF=false`).
+
 Example:
 
 ```text

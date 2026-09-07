@@ -12,6 +12,7 @@ from custom_components.virtual_devices import (
 from custom_components.virtual_devices.const import (
     CONF_CLOSE_SOURCE,
     CONF_CLOSED_LIMIT,
+    CONF_CLOSED_LIMIT_ACTIVE_STATE,
     CONF_CLOSED_LIMIT_DEBOUNCE_MS,
     CONF_CONTROL_MODE,
     CONF_DIRECTION_CHANGE_STRATEGY,
@@ -40,10 +41,11 @@ from custom_components.virtual_devices.gate import (
     StopStrategyType,
 )
 from homeassistant import config_entries
-from homeassistant.const import CONF_NAME
+from homeassistant.const import CONF_NAME, STATE_OFF, STATE_ON
 from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers import selector
 from pytest_homeassistant_custom_component.common import (  # type: ignore[import-untyped]
     MockConfigEntry,
 )
@@ -122,7 +124,7 @@ async def test_full_flow_creates_loads_and_unloads_typed_entry(
         },
         limits={
             CONF_OPEN_LIMIT: "binary_sensor.gate_open",
-            CONF_OPEN_LIMIT_ACTIVE_STATE: False,
+            CONF_OPEN_LIMIT_ACTIVE_STATE: STATE_OFF,
             CONF_OPEN_LIMIT_DEBOUNCE_MS: 0,
             CONF_CLOSED_LIMIT: "binary_sensor.gate_closed",
         },
@@ -147,6 +149,64 @@ async def test_full_flow_creates_loads_and_unloads_typed_entry(
     assert await hass.config_entries.async_unload(entry.entry_id)
     assert entry.state.value == config_entries.ConfigEntryState.NOT_LOADED.value
     assert service_calls == []
+
+
+async def test_limit_form_explicitly_selects_reached_state(
+    hass: HomeAssistant,
+) -> None:
+    """Each endpoint declares whether ON or OFF means physically reached."""
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": config_entries.SOURCE_USER},
+        data={
+            CONF_NAME: "Explicit limit states",
+            CONF_CONTROL_MODE: ControlMode.ASYMMETRIC_SINGLE_STEP.value,
+        },
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_STEP_SOURCE: "button.explicit_limit_gate"}
+    )
+
+    assert result["step_id"] == "limits"
+    schema = result["data_schema"]
+    assert schema is not None
+    for active_key in (
+        CONF_OPEN_LIMIT_ACTIVE_STATE,
+        CONF_CLOSED_LIMIT_ACTIVE_STATE,
+    ):
+        active_selector = next(
+            field
+            for marker, field in schema.schema.items()
+            if marker.schema == active_key
+        )
+        assert isinstance(active_selector, selector.SelectSelector)
+        assert active_selector.config["options"] == [STATE_ON, STATE_OFF]
+        assert active_selector.config["translation_key"] == "limit_active_state"
+
+    defaults = schema({CONF_CLOSED_LIMIT: "binary_sensor.explicit_closed"})
+    assert defaults[CONF_OPEN_LIMIT_ACTIVE_STATE] == STATE_ON
+    assert defaults[CONF_CLOSED_LIMIT_ACTIVE_STATE] == STATE_ON
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_CLOSED_LIMIT: "binary_sensor.explicit_closed",
+            CONF_CLOSED_LIMIT_ACTIVE_STATE: STATE_OFF,
+            CONF_CLOSED_LIMIT_DEBOUNCE_MS: 0,
+            CONF_OPEN_LIMIT: "binary_sensor.explicit_open",
+            CONF_OPEN_LIMIT_ACTIVE_STATE: STATE_ON,
+            CONF_OPEN_LIMIT_DEBOUNCE_MS: 0,
+        },
+    )
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    config = GateConfig.from_dict(dict(result["data"]))
+    assert config.closed_limit is not None
+    assert not config.closed_limit.active_state
+    assert config.open_limit is not None
+    assert config.open_limit.active_state
 
 
 async def test_two_distinct_gates_have_independent_stable_identity(
@@ -362,13 +422,14 @@ async def test_reconfigure_preserves_identity_reloads_and_replaces_listeners(
     hass.services.async_register("button", "press", record)
     hass.states.async_set("button.old_gate", "off")
     hass.states.async_set("button.new_gate", "off")
-    hass.states.async_set("binary_sensor.old_closed", "off")
-    hass.states.async_set("binary_sensor.new_closed", "off")
+    hass.states.async_set("binary_sensor.old_closed", "on")
+    hass.states.async_set("binary_sensor.new_closed", "on")
     created = await create_gate(
         hass,
         controls={CONF_STEP_SOURCE: "button.old_gate"},
         limits={
             CONF_CLOSED_LIMIT: "binary_sensor.old_closed",
+            CONF_CLOSED_LIMIT_ACTIVE_STATE: STATE_OFF,
             CONF_CLOSED_LIMIT_DEBOUNCE_MS: 0,
         },
     )
@@ -406,6 +467,15 @@ async def test_reconfigure_preserves_identity_reloads_and_replaces_listeners(
         result["flow_id"], {CONF_STEP_SOURCE: "button.new_gate"}
     )
     assert result["step_id"] == "limits"
+    limits_schema = result["data_schema"]
+    assert limits_schema is not None
+    limits_defaults = limits_schema(
+        {
+            CONF_CLOSED_LIMIT: "binary_sensor.new_closed",
+            CONF_CLOSED_LIMIT_DEBOUNCE_MS: 0,
+        }
+    )
+    assert limits_defaults[CONF_CLOSED_LIMIT_ACTIVE_STATE] == STATE_OFF
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
         {
@@ -423,6 +493,8 @@ async def test_reconfigure_preserves_identity_reloads_and_replaces_listeners(
 
     updated = GateConfig.from_dict(dict(entry.data))
     assert updated.device_id == original.device_id
+    assert updated.closed_limit is not None
+    assert not updated.closed_limit.active_state
     assert entry.unique_id == original.device_id
     assert entry.title == "Renamed Gate"
     updated_cover = entity_registry.async_get("cover.driveway_gate")
@@ -436,10 +508,10 @@ async def test_reconfigure_preserves_identity_reloads_and_replaces_listeners(
     assert service_calls == []
 
     controller = entry.runtime_data.controller
-    hass.states.async_set("binary_sensor.old_closed", "on")
+    hass.states.async_set("binary_sensor.old_closed", "off")
     await hass.async_block_till_done()
     assert controller.snapshot.state.value == "unknown"
-    hass.states.async_set("binary_sensor.new_closed", "on")
+    hass.states.async_set("binary_sensor.new_closed", "off")
     await hass.async_block_till_done()
     assert controller.snapshot.state.value == "closed"
 

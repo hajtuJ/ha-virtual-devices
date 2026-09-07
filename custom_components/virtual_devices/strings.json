@@ -48,19 +48,19 @@
         "description": "Endpoint sensors are optional except in asymmetric step-by-step mode, which requires CLOSED. Their physical state takes precedence over time estimates.",
         "data": {
           "open_limit": "OPEN endpoint sensor",
-          "open_limit_active_state": "OPEN sensor active when on",
+          "open_limit_active_state": "OPEN endpoint reached when sensor state is",
           "open_limit_debounce_ms": "OPEN debounce (ms)",
           "closed_limit": "CLOSED endpoint sensor",
-          "closed_limit_active_state": "CLOSED sensor active when on",
+          "closed_limit_active_state": "CLOSED endpoint reached when sensor state is",
           "closed_limit_debounce_ms": "CLOSED debounce (ms)",
           "obstacle_source": "Obstacle sensor"
         },
         "data_description": {
           "open_limit": "Optional binary sensor active at the fully open endpoint.",
-          "open_limit_active_state": "Disable for a normally-closed/inverted sensor.",
+          "open_limit_active_state": "Choose the Home Assistant state reported when the OPEN limit contact is closed and the endpoint has been reached.",
           "open_limit_debounce_ms": "How long the state must remain stable.",
           "closed_limit": "Optional binary sensor active at the fully closed endpoint.",
-          "closed_limit_active_state": "Disable for a normally-closed/inverted sensor.",
+          "closed_limit_active_state": "Choose the Home Assistant state reported when the CLOSED limit contact is closed and the endpoint has been reached.",
           "closed_limit_debounce_ms": "How long the state must remain stable.",
           "obstacle_source": "Optional binary sensor that blocks CLOSE while active."
         }
@@ -116,6 +116,7 @@
       "duplicate_sensor": "Endpoint and obstacle roles must use different sensors.",
       "invalid_source_layout": "The selected controls do not match the control mode.",
       "invalid_binary_sensor": "Select a binary sensor.",
+      "invalid_limit_active_state": "Select ON or OFF as the state that means the endpoint has been reached.",
       "positive": "Enter a value greater than zero.",
       "non_negative": "Enter zero or a positive value.",
       "unsupported_version": "This configuration version is not supported.",
@@ -135,6 +136,12 @@
     }
   },
   "selector": {
+    "limit_active_state": {
+      "options": {
+        "on": "ON — endpoint reached",
+        "off": "OFF — endpoint reached"
+      }
+    },
     "control_mode": {
       "options": {
         "single_step": "Single step-by-step control",

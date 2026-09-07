@@ -7,7 +7,7 @@ from uuid import uuid4
 
 import voluptuous as vol
 from homeassistant import config_entries
-from homeassistant.const import CONF_NAME
+from homeassistant.const import CONF_NAME, STATE_OFF, STATE_ON
 from homeassistant.helpers import selector
 
 from .const import (
@@ -101,6 +101,16 @@ def _select(values: list[str], translation_key: str) -> selector.SelectSelector:
             translation_key=translation_key,
         )
     )
+
+
+LIMIT_ACTIVE_STATE_SELECTOR = _select([STATE_ON, STATE_OFF], "limit_active_state")
+
+
+def _limit_active_state_value(value: Any) -> str:
+    """Convert persisted boolean state into the explicit flow option."""
+    if isinstance(value, bool):
+        return STATE_ON if value else STATE_OFF
+    return str(value)
 
 
 class VirtualDevicesConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -236,8 +246,10 @@ class VirtualDevicesConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     self._optional_marker(CONF_OPEN_LIMIT): BINARY_SENSOR_SELECTOR,
                     vol.Required(
                         CONF_OPEN_LIMIT_ACTIVE_STATE,
-                        default=self._data.get(CONF_OPEN_LIMIT_ACTIVE_STATE, True),
-                    ): selector.BooleanSelector(),
+                        default=_limit_active_state_value(
+                            self._data.get(CONF_OPEN_LIMIT_ACTIVE_STATE, True)
+                        ),
+                    ): LIMIT_ACTIVE_STATE_SELECTOR,
                     vol.Required(
                         CONF_OPEN_LIMIT_DEBOUNCE_MS,
                         default=self._data.get(
@@ -247,8 +259,10 @@ class VirtualDevicesConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     closed_limit_marker: BINARY_SENSOR_SELECTOR,
                     vol.Required(
                         CONF_CLOSED_LIMIT_ACTIVE_STATE,
-                        default=self._data.get(CONF_CLOSED_LIMIT_ACTIVE_STATE, True),
-                    ): selector.BooleanSelector(),
+                        default=_limit_active_state_value(
+                            self._data.get(CONF_CLOSED_LIMIT_ACTIVE_STATE, True)
+                        ),
+                    ): LIMIT_ACTIVE_STATE_SELECTOR,
                     vol.Required(
                         CONF_CLOSED_LIMIT_DEBOUNCE_MS,
                         default=self._data.get(
@@ -469,9 +483,19 @@ class VirtualDevicesConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Build an optional endpoint configuration from one flow section."""
         if entity_key not in data:
             return None
+        active_value = data[active_key]
+        if not isinstance(active_value, bool) and active_value not in (
+            STATE_ON,
+            STATE_OFF,
+        ):
+            raise GateConfigError(active_key, "invalid_limit_active_state")
         return GateLimitConfig(
             entity_id=str(data[entity_key]),
-            active_state=bool(data[active_key]),
+            active_state=(
+                active_value
+                if isinstance(active_value, bool)
+                else active_value == STATE_ON
+            ),
             debounce_ms=int(data[debounce_key]),
         )
 
@@ -635,7 +659,7 @@ class VirtualDevicesConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         ):
             if limit is not None:
                 data[entity_key] = limit.entity_id
-                data[active_key] = limit.active_state
+                data[active_key] = _limit_active_state_value(limit.active_state)
                 data[debounce_key] = limit.debounce_ms
         if config.obstacle_source is not None:
             data[CONF_OBSTACLE_SOURCE] = config.obstacle_source

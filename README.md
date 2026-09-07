@@ -114,6 +114,10 @@ pulse and OPEN uses two. Commands are rejected when the controller phase is unkn
 If a physical action starts but its sequence cannot finish, the logical state becomes
 unknown and no pulse is retried automatically.
 
+For every OPEN or CLOSED limit, the setup form explicitly asks whether the Home
+Assistant state `ON` or `OFF` means that the contact is closed and the corresponding
+endpoint has been reached. This selection is independent for the two limits.
+
 ## External movement and restart behavior
 
 Endpoint changes can infer externally initiated movement, for example when a remote

@@ -52,6 +52,11 @@ CLOSING + OPEN
 Test both button and switch sources with a required CLOSED limit and optional OPEN
 limit:
 
+- verify that each configured limit explicitly selects `ON` or `OFF` as the state
+  meaning its contact is closed and its endpoint has been reached;
+- verify that Reconfigure Flow preserves each selected state while retaining stable
+  gate identity;
+
 ```text
 CLOSED + OPEN -> 1 pulse
 OPENING + STOP -> 1 pulse
