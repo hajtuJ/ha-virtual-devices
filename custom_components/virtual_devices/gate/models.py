@@ -55,6 +55,13 @@ class ControlMode(StrEnum):
     SEPARATE_OPEN_CLOSE_STOP = "separate_open_close_stop"
 
 
+class LimitTopology(StrEnum):
+    """Relationship between configured physical endpoint sensors."""
+
+    INDEPENDENT = "independent"
+    SINGLE_MAGNET = "single_magnet"
+
+
 class ControlActionType(StrEnum):
     """MVP source entity action families."""
 
@@ -132,6 +139,15 @@ class GateEvent:
     """Input to the pure gate state machine."""
 
     type: GateEventType
+    fresh_activation: bool = False
+
+    def __post_init__(self) -> None:
+        """Restrict edge metadata to endpoint-activation events."""
+        if self.fresh_activation and self.type not in (
+            GateEventType.OPEN_LIMIT_ON,
+            GateEventType.CLOSED_LIMIT_ON,
+        ):
+            raise ValueError("fresh_activation requires a limit-on event")
 
 
 @dataclass(frozen=True, slots=True)

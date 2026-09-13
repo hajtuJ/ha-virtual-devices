@@ -98,6 +98,7 @@ class GateSourceObserver:
         if self._stopped or self._initializing:
             return
         entity_id = event.data["entity_id"]
+        old_state = event.data["old_state"]
         new_state = event.data["new_state"]
         if entity_id in {source.entity_id for source in self._config.control_sources}:
             self._create_task(self._async_refresh_control_availability())
@@ -106,13 +107,19 @@ class GateSourceObserver:
             entity_id == self._config.open_limit.entity_id
         ):
             self._schedule_limit_debounce(
-                GateEndpoint.OPEN, self._config.open_limit, new_state
+                GateEndpoint.OPEN,
+                self._config.open_limit,
+                old_state,
+                new_state,
             )
         elif self._config.closed_limit is not None and (
             entity_id == self._config.closed_limit.entity_id
         ):
             self._schedule_limit_debounce(
-                GateEndpoint.CLOSED, self._config.closed_limit, new_state
+                GateEndpoint.CLOSED,
+                self._config.closed_limit,
+                old_state,
+                new_state,
             )
         elif entity_id == self._config.obstacle_source:
             self._create_task(self._async_apply_obstacle())
@@ -122,23 +129,52 @@ class GateSourceObserver:
         self,
         endpoint: GateEndpoint,
         limit: GateLimitConfig,
+        old_state: State | None,
         new_state: State | None,
     ) -> None:
         """Accept a limit only after its raw state remains stable."""
+        if (
+            self._usable(old_state)
+            and self._usable(new_state)
+            and old_state is not None
+            and new_state is not None
+            and old_state.state == new_state.state
+        ):
+            # Attribute-only updates and duplicate MQTT publications are not a
+            # new physical edge and must not supersede the opposite endpoint.
+            return
         existing = self._pending_debounce.pop(limit.entity_id, None)
         if existing is not None:
             existing()
         if new_state is None or not self._usable(new_state):
             return
         expected = new_state.state
+        fresh_activation = (
+            old_state is not None
+            and self._usable(old_state)
+            and not self._limit_active(limit, old_state)
+            and self._limit_active(limit, new_state)
+        )
         if limit.debounce_ms == 0:
-            self._create_task(self._async_apply_limit(endpoint, limit, expected))
+            self._create_task(
+                self._async_apply_limit(
+                    endpoint,
+                    limit,
+                    expected,
+                    fresh_activation=fresh_activation,
+                )
+            )
             return
 
         async def apply_after_debounce(now: Any) -> None:
             del now
             self._pending_debounce.pop(limit.entity_id, None)
-            await self._async_apply_limit(endpoint, limit, expected)
+            await self._async_apply_limit(
+                endpoint,
+                limit,
+                expected,
+                fresh_activation=fresh_activation,
+            )
 
         self._pending_debounce[limit.entity_id] = async_call_later(
             self._hass,
@@ -147,7 +183,12 @@ class GateSourceObserver:
         )
 
     async def _async_apply_limit(
-        self, endpoint: GateEndpoint, limit: GateLimitConfig, expected: str
+        self,
+        endpoint: GateEndpoint,
+        limit: GateLimitConfig,
+        expected: str,
+        *,
+        fresh_activation: bool,
     ) -> None:
         """Verify stable raw state and emit its normalized endpoint event."""
         if self._stopped:
@@ -158,8 +199,15 @@ class GateSourceObserver:
         if current.state != expected:
             return
         await self._controller.async_handle_limit(
-            endpoint, raw_is_on=current.state == STATE_ON
+            endpoint,
+            raw_is_on=current.state == STATE_ON,
+            fresh_activation=fresh_activation,
         )
+
+    @staticmethod
+    def _limit_active(limit: GateLimitConfig, state: State) -> bool:
+        """Return the semantic endpoint state for one usable HA state."""
+        return (state.state == STATE_ON) is limit.active_state
 
     async def _async_apply_obstacle(self) -> None:
         if self._config.obstacle_source is None or self._stopped:

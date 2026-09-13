@@ -16,6 +16,7 @@ from .models import (
     GateSnapshot,
     GateState,
     GateTransition,
+    LimitTopology,
     RepeatedCommandPolicy,
     StopStrategyType,
 )
@@ -48,6 +49,14 @@ class GateStateMachineConfig:
     repeated_open_policy: RepeatedCommandPolicy = RepeatedCommandPolicy.IGNORE
     repeated_close_policy: RepeatedCommandPolicy = RepeatedCommandPolicy.IGNORE
     control_mode: ControlMode = ControlMode.SINGLE_STEP
+    limit_topology: LimitTopology = LimitTopology.INDEPENDENT
+
+    def __post_init__(self) -> None:
+        """Reject an exclusive topology without its complete physical pair."""
+        if self.limit_topology is LimitTopology.SINGLE_MAGNET and (
+            self.open_limit is None or self.closed_limit is None
+        ):
+            raise ValueError("single-magnet topology requires both endpoint sensors")
 
 
 class GateStateMachine:
@@ -57,7 +66,13 @@ class GateStateMachine:
         """Initialize the state machine with immutable behavior configuration."""
         self._config = config
 
-    def limit_event(self, endpoint: GateEndpoint, *, raw_is_on: bool) -> GateEvent:
+    def limit_event(
+        self,
+        endpoint: GateEndpoint,
+        *,
+        raw_is_on: bool,
+        fresh_activation: bool = False,
+    ) -> GateEvent:
         """Normalize a raw sensor value using configured active-state inversion."""
         sensor = (
             self._config.open_limit
@@ -75,7 +90,7 @@ class GateStateMachine:
             (GateEndpoint.CLOSED, True): GateEventType.CLOSED_LIMIT_ON,
             (GateEndpoint.CLOSED, False): GateEventType.CLOSED_LIMIT_OFF,
         }[(endpoint, active)]
-        return GateEvent(event_type)
+        return GateEvent(event_type, fresh_activation=active and fresh_activation)
 
     def transition(self, snapshot: GateSnapshot, event: GateEvent) -> GateTransition:
         """Return the next immutable snapshot and requested side effects."""
@@ -91,7 +106,7 @@ class GateStateMachine:
             GateEventType.CLOSED_LIMIT_ON,
             GateEventType.CLOSED_LIMIT_OFF,
         ):
-            return self._limit(snapshot, event.type)
+            return self._limit(snapshot, event)
         if event.type is GateEventType.MOVEMENT_TIMEOUT:
             return self._timeout(snapshot)
         if event.type is GateEventType.SOURCE_UNAVAILABLE:
@@ -181,9 +196,9 @@ class GateStateMachine:
             snapshot.state is GateState.OPEN and command is GateCommand.CLOSE
         ):
             pulse_count = 1
-        elif (
-            snapshot.state is GateState.OPENING and command is GateCommand.CLOSE
-        ) or (snapshot.state is GateState.CLOSING and command is GateCommand.OPEN):
+        elif (snapshot.state is GateState.OPENING and command is GateCommand.CLOSE) or (
+            snapshot.state is GateState.CLOSING and command is GateCommand.OPEN
+        ):
             pulse_count = 2
         elif snapshot.state is GateState.STOPPED and snapshot.last_direction in (
             GateDirection.OPENING,
@@ -450,10 +465,9 @@ class GateStateMachine:
             ),
         )
 
-    def _limit(
-        self, snapshot: GateSnapshot, event_type: GateEventType
-    ) -> GateTransition:
+    def _limit(self, snapshot: GateSnapshot, event: GateEvent) -> GateTransition:
         """Apply a semantic endpoint sensor event with physical precedence."""
+        event_type = event.type
         is_open_limit = event_type in (
             GateEventType.OPEN_LIMIT_ON,
             GateEventType.OPEN_LIMIT_OFF,
@@ -467,13 +481,28 @@ class GateStateMachine:
             GateEventType.OPEN_LIMIT_ON,
             GateEventType.CLOSED_LIMIT_ON,
         )
-        changed = replace(
-            snapshot,
-            open_limit_active=active if is_open_limit else snapshot.open_limit_active,
-            closed_limit_active=active
-            if not is_open_limit
-            else snapshot.closed_limit_active,
-        )
+        if (
+            active
+            and event.fresh_activation
+            and self._config.limit_topology is LimitTopology.SINGLE_MAGNET
+        ):
+            # A fresh edge from a physically exclusive, single-magnet pair makes
+            # the opposite cached endpoint observation stale by construction.
+            changed = replace(
+                snapshot,
+                open_limit_active=is_open_limit,
+                closed_limit_active=not is_open_limit,
+            )
+        else:
+            changed = replace(
+                snapshot,
+                open_limit_active=active
+                if is_open_limit
+                else snapshot.open_limit_active,
+                closed_limit_active=active
+                if not is_open_limit
+                else snapshot.closed_limit_active,
+            )
 
         if changed.open_limit_active and changed.closed_limit_active:
             conflict = replace(

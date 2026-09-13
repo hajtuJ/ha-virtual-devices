@@ -7,12 +7,12 @@ been completed and how it was verified.
 
 ## Current snapshot
 
-- **Updated:** 2026-09-07
+- **Updated:** 2026-09-13
 - **Release target:** MVP / `0.1.0`
 - **Overall status:** `IN_PROGRESS`
-- **Checklist progress:** 99 / 104 tasks (95%)
+- **Checklist progress:** 101 / 104 tasks (97%)
 - **Current stage:** Stage 10 — hardening, CI, and MVP release
-- **Next milestone:** complete manual simulated/hardware tests and public HACS validation
+- **Next milestone:** complete manual simulated/hardware tests and publish the release
 
 ## Status rules
 
@@ -41,7 +41,7 @@ Do not count examples, exit gates, or the final MVP checklist a second time.
 | --- | --- | --- | ---: | --- |
 | 0 | Decisions and baseline | `DONE` | 8 / 8 | — |
 | 1 | Repository and tooling | `DONE` | 9 / 9 | Stage 0 |
-| 2 | HA scaffold and HACS | `IN_PROGRESS` | 7 / 8 | Stage 1 |
+| 2 | HA scaffold and HACS | `DONE` | 8 / 8 | Stage 1 |
 | 3 | Domain model | `DONE` | 9 / 9 | Stage 2 |
 | 4 | State machine | `DONE` | 10 / 10 | Stage 3 |
 | 5 | Command model and executor | `DONE` | 10 / 10 | Stages 3–4 |
@@ -49,7 +49,7 @@ Do not count examples, exit gates, or the final MVP checklist a second time.
 | 7 | Controller and HA entities | `DONE` | 11 / 11 | Stages 4–6 |
 | 8 | Observation, position, restore, diagnostics | `DONE` | 10 / 10 | Stage 7 |
 | 9 | Reconfigure, translations, and user docs | `DONE` | 9 / 9 | Stages 6–8 |
-| 10 | Hardening, CI, and MVP release | `IN_PROGRESS` | 6 / 10 | Stages 1–9 |
+| 10 | Hardening, CI, and MVP release | `IN_PROGRESS` | 7 / 10 | Stages 1–9 |
 
 ## Stage 0 — Decisions and implementation baseline
 
@@ -105,7 +105,7 @@ smoke, lint, and formatting checks successfully.
 
 ## Stage 2 — Home Assistant scaffold and HACS baseline
 
-**Status:** `IN_PROGRESS`
+**Status:** `DONE`
 
 **Goal:** produce a loadable, UI-discoverable custom integration skeleton.
 
@@ -116,7 +116,7 @@ smoke, lint, and formatting checks successfully.
 - [x] Implement typed per-entry runtime data and entry setup/unload skeletons.
 - [x] Add `hacs.json` matching current HACS requirements.
 - [x] Add scaffold/config-flow tests that load the integration without movement.
-- [ ] Pass applicable hassfest and HACS validation.
+- [x] Pass applicable hassfest and HACS validation.
 
 **Exit gate:** Home Assistant can load and unload the integration skeleton; the UI
 flow opens; setup, reload, and unload execute no source action.
@@ -127,6 +127,8 @@ flow opens; setup, reload, and unload execute no source action.
   2026.8.3; the tests prove two entries receive distinct stable identities.
 - 2026-08-30 — official `ghcr.io/home-assistant/hassfest:latest` reported one
   integration and zero invalid integrations. HACS Action remains unverified.
+- 2026-09-07 — public-repository Validate run 34149200414 passed both hassfest and
+  HACS jobs.
 
 ## Stage 3 — Gate domain model
 
@@ -312,6 +314,9 @@ never moves the gate; no listener, timer, or task leaks remain after unload.
 - 2026-08-30 — translated enum/problem entities and redacted entry diagnostics expose
   state, direction, command, availability, endpoints, position, and problem without
   gate names, stable IDs, or source entity IDs.
+- 2026-09-13 — explicit independent/single-magnet endpoint topology preserves
+  startup conflict safety while allowing a fresh, debounced endpoint edge to replace
+  a stale opposing reading without any physical action.
 
 ## Stage 9 — Reconfigure, translations, and user documentation
 
@@ -357,7 +362,7 @@ listeners, movement during reload, or untranslated UI strings.
 - [x] Run and pass the complete test suite.
 - [x] Run and pass Ruff formatting and lint checks.
 - [x] Run and pass translation and structure validation.
-- [ ] Run and pass HACS validation and applicable hassfest checks.
+- [x] Run and pass HACS validation and applicable hassfest checks.
 - [x] Add CI workflows for tests, lint, HACS, and structure validation.
 - [x] Verify all safety regressions listed in `TEST_PLAN.md`.
 - [ ] Perform a documented manual test on a non-moving/simulated HA setup first.
@@ -384,6 +389,9 @@ and release evidence is linked below.
 - 2026-09-07 — the extended asymmetric step-by-step profile adds fixed direction-
   aware 1/2-pulse behavior, opening-only STOP, required CLOSED/optional OPEN limits,
   and conservative UNKNOWN recovery after partially attempted sequences.
+- 2026-09-13 — single-magnet topology adds edge-qualified endpoint supersession,
+  conservative startup conflict handling, versioned migration, diagnostics,
+  translations, and focused safety regressions.
 
 ## MVP acceptance checklist
 
@@ -416,12 +424,12 @@ Record decisions that affect compatibility, persistence, or physical behavior.
 | ADR-003 | 2026-08-30 | `ACCEPTED` | Manifest uses `integration_type: helper` and `iot_class: calculated`. | The integration composes existing HA entities into a calculated helper entity; this matches current core helper manifests. |
 | ADR-004 | 2026-08-30 | `ACCEPTED` | MVP source actions are switch activation/deactivation and button press. | These cover common relay and momentary-input controllers. The domain action model remains extensible; arbitrary scripts, covers, and custom sequences are deferred. |
 | ADR-005 | 2026-08-30 | `ACCEPTED` | Python 3.14.2+, exact development pins, uv lockfile, Ruff, pytest, and mypy. | HA 2026.8.3 requires Python 3.14.2. Exact test pins reproduce the supported HA patch level; runtime has no third-party dependencies. Strict typing starts with project-owned code. |
+| ADR-006 | 2026-09-13 | `ACCEPTED` | Endpoint topology is explicit: existing entries default to independent sensors; single-magnet mode requires both limits and accepts only a fresh, debounced activation edge as authority to supersede the opposite cached endpoint. | Some battery sensors can lose a release telegram while one physical magnet still guarantees mutually exclusive contacts. Startup and non-edge observations remain conflicts, duplicate publications cannot select an endpoint, and reconciliation never executes a source action. |
 
 ## Active blockers
 
 | Since | Stage | Blocker | Owner / next action |
 | --- | --- | --- | --- |
-| 2026-08-30 | 2 | HACS Action cannot validate a private repository; HACS publishing requires a public GitHub repository. | Repository owner: make the repository public before HACS/release validation. Implementation may continue independently. |
 | 2026-08-30 | 10 | Codex in-app browser policy blocks loopback navigation after the simulated HA restart, so the native UI exercise is incomplete. | Repository owner: repeat `RELEASE_TEST_RECORD.md` simulated procedure in a browser that permits `127.0.0.1`, or provide an accessible test HA instance. |
 | 2026-08-30 | 10 | Controlled physical hardware validation requires a gate test environment and certified safety systems. | Repository owner: schedule and record the controlled hardware procedure before tagging 0.1.0. |
 
@@ -470,6 +478,10 @@ available. Do not replace failed results; add a later passing entry.
 | 2026-09-07 | 2, 6, 9 | `docker run --rm -v "$PWD:/github/workspace" ghcr.io/home-assistant/hassfest:latest` | PASS | One integration, zero invalid integrations; manifest, Config Flow, JSON, and synchronized translations validated. |
 | 2026-09-07 | 6, 9 | `.venv/bin/pytest -q` | PASS | All 156 tests passed, including explicit per-limit ON/OFF endpoint-reached selection and preservation through Reconfigure Flow. |
 | 2026-09-07 | 1–10 | Ruff, strict mypy, compileall, JSON parsing, `git diff --check`, and hassfest | PASS | Static checks passed; all project files were formatted; synchronized translations and Config Flow validated with one integration and zero invalid integrations. |
+| 2026-09-07 | 2, 10 | GitHub Actions Validate run 34149200414 | PASS | Public-repository hassfest and HACS jobs both passed on commit `73e988b`. |
+| 2026-09-13 | 3–10 | `.venv/bin/pytest -q` | PASS | All 193 tests passed, including single-magnet missing-release recovery, both endpoint directions, startup conflict recovery, debounce, duplicate-state filtering, Config/Reconfigure Flow, migration, and diagnostics. |
+| 2026-09-13 | 1–10 | Ruff, format check, strict mypy, and compileall | PASS | All 34 project Python files pass lint, formatting, typing, and bytecode compilation. |
+| 2026-09-13 | 2, 6, 9 | `docker run --rm -v "$PWD:/github/workspace" ghcr.io/home-assistant/hassfest:latest` | PASS | One integration, zero invalid integrations; JSON, Config Flow, and synchronized translations validated. |
 
 ## Progress change log
 
@@ -488,3 +500,4 @@ available. Do not replace failed results; add a later passing entry.
 | 2026-08-30 | Completed automated release hardening, CI coverage, safety audit, and 0.1.0 release notes. | 99 / 104 (95%) |
 | 2026-09-07 | Added and verified the extended asymmetric step-by-step controller profile; release-gate count is unchanged. | 99 / 104 (95%) |
 | 2026-09-07 | Replaced ambiguous limit-state toggles with explicit translated ON/OFF endpoint-reached selectors; release-gate count is unchanged. | 99 / 104 (95%) |
+| 2026-09-13 | Recorded successful public HACS validation and added the verified single-magnet endpoint topology; completed two validation gates. | 101 / 104 (97%) |

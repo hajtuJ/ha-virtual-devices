@@ -15,6 +15,7 @@ from custom_components.virtual_devices.gate import (
     GateLimitConfig,
     GateProblem,
     GateState,
+    LimitTopology,
     SourceRef,
 )
 from homeassistant.const import STATE_OFF, STATE_ON, STATE_UNAVAILABLE
@@ -99,7 +100,7 @@ async def test_limits_external_motion_conflict_and_diagnostic_entities(
     hass.states.async_set("binary_sensor.gate_closed", STATE_ON)
     await hass.async_block_till_done()
     assert controller.snapshot.state.value == GateState.ERROR.value
-    assert controller.snapshot.problem is GateProblem.LIMIT_SENSOR_CONFLICT
+    assert controller.snapshot.problem.value == GateProblem.LIMIT_SENSOR_CONFLICT.value
     problem = hass.states.get("binary_sensor.observed_gate_problem")
     assert problem is not None
     assert problem.state == STATE_ON
@@ -192,6 +193,94 @@ async def test_debounce_rejects_bounce_and_inverted_limit_is_authoritative(
     hass.states.async_set("binary_sensor.gate_closed", STATE_OFF)
     await asyncio.sleep(0.03)
     assert controller.snapshot.state.value == GateState.CLOSED.value
+
+
+async def test_single_magnet_closes_when_open_release_message_is_missing(
+    hass: HomeAssistant,
+) -> None:
+    """A fresh CLOSED edge supersedes stale OPEN without another physical action."""
+    calls: list[ServiceCall] = []
+
+    async def record(call: ServiceCall) -> None:
+        calls.append(call)
+
+    hass.services.async_register("button", "press", record)
+    hass.states.async_set("binary_sensor.gate_open", STATE_OFF)
+    hass.states.async_set("binary_sensor.gate_closed", STATE_ON)
+    hass.states.async_set("binary_sensor.gate_obstacle", STATE_OFF)
+    config = replace(
+        observed_config(),
+        control_mode=ControlMode.ASYMMETRIC_SINGLE_STEP,
+        open_limit=GateLimitConfig(
+            "binary_sensor.gate_open", active_state=False, debounce_ms=0
+        ),
+        closed_limit=GateLimitConfig(
+            "binary_sensor.gate_closed", active_state=False, debounce_ms=0
+        ),
+        limit_topology=LimitTopology.SINGLE_MAGNET,
+    )
+    entry = await setup_observed_gate(hass, config)
+    controller = entry.runtime_data.controller
+    assert controller.snapshot.state.value == GateState.OPEN.value
+
+    await controller.async_close()
+    assert controller.snapshot.state.value == GateState.CLOSING.value
+    assert len(calls) == 1
+
+    # OPEN remains OFF (active) because its release telegram was lost.
+    hass.states.async_set("binary_sensor.gate_closed", STATE_OFF)
+    await hass.async_block_till_done()
+    assert controller.snapshot.state.value == GateState.CLOSED.value
+    assert controller.snapshot.estimated_position == 0
+    assert not controller.snapshot.open_limit_active
+    assert controller.snapshot.closed_limit_active
+    assert controller.snapshot.problem.value == GateProblem.NONE.value
+    assert len(calls) == 1
+
+    # A duplicate stale OPEN state with changed attributes is not a new edge.
+    hass.states.async_set("binary_sensor.gate_open", STATE_OFF, {"linkquality": 120})
+    await hass.async_block_till_done()
+    assert controller.snapshot.state.value == GateState.CLOSED.value
+    assert controller.snapshot.problem is GateProblem.NONE
+
+
+async def test_single_magnet_startup_conflict_requires_fresh_stable_edge(
+    hass: HomeAssistant,
+) -> None:
+    """Startup remains conservative; a debounced edge later restores authority."""
+    hass.services.async_register("button", "press", lambda call: None)
+    hass.states.async_set("binary_sensor.gate_open", STATE_OFF)
+    hass.states.async_set("binary_sensor.gate_closed", STATE_OFF)
+    hass.states.async_set("binary_sensor.gate_obstacle", STATE_OFF)
+    config = replace(
+        observed_config(debounce_ms=20),
+        open_limit=GateLimitConfig(
+            "binary_sensor.gate_open", active_state=False, debounce_ms=20
+        ),
+        closed_limit=GateLimitConfig(
+            "binary_sensor.gate_closed", active_state=False, debounce_ms=20
+        ),
+        limit_topology=LimitTopology.SINGLE_MAGNET,
+    )
+    entry = await setup_observed_gate(hass, config)
+    controller = entry.runtime_data.controller
+    assert controller.snapshot.state.value == GateState.ERROR.value
+    assert controller.snapshot.problem.value == GateProblem.LIMIT_SENSOR_CONFLICT.value
+
+    hass.states.async_set("binary_sensor.gate_closed", STATE_ON)
+    await asyncio.sleep(0.03)
+    assert controller.snapshot.state.value == GateState.OPEN.value
+
+    hass.states.async_set("binary_sensor.gate_closed", STATE_OFF)
+    await asyncio.sleep(0.005)
+    hass.states.async_set("binary_sensor.gate_closed", STATE_ON)
+    await asyncio.sleep(0.03)
+    assert controller.snapshot.state.value == GateState.OPEN.value
+
+    hass.states.async_set("binary_sensor.gate_closed", STATE_OFF)
+    await asyncio.sleep(0.03)
+    assert controller.snapshot.state.value == GateState.CLOSED.value
+    assert controller.snapshot.problem.value == GateProblem.NONE.value
 
 
 async def test_startup_inactive_limit_does_not_infer_motion_or_start_timer(

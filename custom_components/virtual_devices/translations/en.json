@@ -53,6 +53,7 @@
           "closed_limit": "CLOSED endpoint sensor",
           "closed_limit_active_state": "CLOSED endpoint reached when sensor state is",
           "closed_limit_debounce_ms": "CLOSED debounce (ms)",
+          "limit_topology": "Endpoint topology",
           "obstacle_source": "Obstacle sensor"
         },
         "data_description": {
@@ -62,6 +63,7 @@
           "closed_limit": "Optional binary sensor active at the fully closed endpoint.",
           "closed_limit_active_state": "Choose the Home Assistant state reported when the CLOSED limit contact is closed and the endpoint has been reached.",
           "closed_limit_debounce_ms": "How long the state must remain stable.",
+          "limit_topology": "Choose independent sensors, or a physically exclusive pair operated by one magnet. In single-magnet mode, a fresh endpoint activation supersedes a stale opposite reading.",
           "obstacle_source": "Optional binary sensor that blocks CLOSE while active."
         }
       },
@@ -117,6 +119,7 @@
       "invalid_source_layout": "The selected controls do not match the control mode.",
       "invalid_binary_sensor": "Select a binary sensor.",
       "invalid_limit_active_state": "Select ON or OFF as the state that means the endpoint has been reached.",
+      "single_magnet_requires_limits": "Single-magnet topology requires both OPEN and CLOSED endpoint sensors.",
       "positive": "Enter a value greater than zero.",
       "non_negative": "Enter zero or a positive value.",
       "unsupported_version": "This configuration version is not supported.",
@@ -141,6 +144,12 @@
       "options": {
         "on": "ON — endpoint reached",
         "off": "OFF — endpoint reached"
+      }
+    },
+    "limit_topology": {
+      "options": {
+        "independent": "Independent endpoint sensors",
+        "single_magnet": "One magnet — mutually exclusive endpoints"
       }
     },
     "control_mode": {

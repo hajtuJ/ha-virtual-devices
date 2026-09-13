@@ -96,9 +96,9 @@ async def async_migrate_entry(
     hass: HomeAssistant, entry: VirtualDevicesConfigEntry
 ) -> bool:
     """Normalize older version-1 entries without setup or physical actions."""
-    if entry.version != 1 or entry.minor_version > 2:
+    if entry.version != 1 or entry.minor_version > 3:
         return False
-    if entry.minor_version == 2:
+    if entry.minor_version == 3:
         return True
     try:
         config = GateConfig.from_dict(dict(entry.data))
@@ -108,6 +108,6 @@ async def async_migrate_entry(
         entry,
         data=config.to_dict(),
         version=1,
-        minor_version=2,
+        minor_version=3,
     )
     return True

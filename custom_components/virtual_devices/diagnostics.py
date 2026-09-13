@@ -47,6 +47,7 @@ async def async_get_config_entry_diagnostics(
             "control_source_count": len(config.control_sources),
             "has_open_limit": config.open_limit is not None,
             "has_closed_limit": config.closed_limit is not None,
+            "limit_topology": config.limit_topology.value,
             "has_obstacle_source": config.obstacle_source is not None,
             "stop_strategy": config.stop_strategy.value,
             "direction_change_strategy": config.direction_change_strategy.value,

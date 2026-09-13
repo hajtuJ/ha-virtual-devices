@@ -52,6 +52,7 @@ async def test_diagnostics_are_useful_and_redact_names_and_entity_ids(
     rendered = str(diagnostics)
 
     assert diagnostics["config"]["control_mode"] == "single_step"
+    assert diagnostics["config"]["limit_topology"] == "independent"
     assert diagnostics["config"]["control_source_count"] == 1
     assert diagnostics["runtime"]["state"] == "unknown"
     assert "Private Driveway" not in rendered

@@ -53,6 +53,7 @@
           "closed_limit": "Krańcówka CLOSED",
           "closed_limit_active_state": "Osiągnięcie CLOSED sygnalizuje stan",
           "closed_limit_debounce_ms": "Debounce CLOSED (ms)",
+          "limit_topology": "Topologia krańcówek",
           "obstacle_source": "Czujnik przeszkody"
         },
         "data_description": {
@@ -62,6 +63,7 @@
           "closed_limit": "Opcjonalny binary sensor aktywny przy pełnym zamknięciu.",
           "closed_limit_active_state": "Wybierz stan Home Assistant raportowany po zwarciu krańcówki CLOSED i osiągnięciu pełnego zamknięcia.",
           "closed_limit_debounce_ms": "Czas, przez jaki stan musi pozostać stabilny.",
+          "limit_topology": "Wybierz niezależne sensory albo fizycznie wzajemnie wykluczającą się parę obsługiwaną jednym magnesem. W trybie jednego magnesu świeża aktywacja krańcówki zastępuje nieaktualne wskazanie przeciwnej.",
           "obstacle_source": "Opcjonalny binary sensor blokujący CLOSE, gdy jest aktywny."
         }
       },
@@ -117,6 +119,7 @@
       "invalid_source_layout": "Wybrane sterowanie nie pasuje do trybu sterowania.",
       "invalid_binary_sensor": "Wybierz binary sensor.",
       "invalid_limit_active_state": "Wybierz ON albo OFF jako stan oznaczający osiągnięcie położenia krańcowego.",
+      "single_magnet_requires_limits": "Topologia jednego magnesu wymaga krańcówek OPEN i CLOSED.",
       "positive": "Wprowadź wartość większą od zera.",
       "non_negative": "Wprowadź zero lub wartość dodatnią.",
       "unsupported_version": "Ta wersja konfiguracji nie jest obsługiwana.",
@@ -141,6 +144,12 @@
       "options": {
         "on": "ON — położenie osiągnięte",
         "off": "OFF — położenie osiągnięte"
+      }
+    },
+    "limit_topology": {
+      "options": {
+        "independent": "Niezależne krańcówki",
+        "single_magnet": "Jeden magnes — wzajemnie wykluczające krańcówki"
       }
     },
     "control_mode": {

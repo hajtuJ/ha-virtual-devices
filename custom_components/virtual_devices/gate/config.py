@@ -16,6 +16,7 @@ from ..const import (
     CONF_DIRECTION_CHANGE_DELAY_MS,
     CONF_DIRECTION_CHANGE_STRATEGY,
     CONF_HOLD_DURATION_MS,
+    CONF_LIMIT_TOPOLOGY,
     CONF_MINIMUM_COMMAND_INTERVAL_MS,
     CONF_OBSTACLE_SOURCE,
     CONF_OPEN_LIMIT,
@@ -36,6 +37,7 @@ from .models import (
     ControlActionType,
     ControlMode,
     DirectionChangeStrategyType,
+    LimitTopology,
     RepeatedCommandPolicy,
     StopStrategyType,
 )
@@ -100,6 +102,7 @@ class GateConfig:
     open_limit: GateLimitConfig | None = None
     closed_limit: GateLimitConfig | None = None
     obstacle_source: str | None = None
+    limit_topology: LimitTopology = LimitTopology.INDEPENDENT
     opening_time_ms: int = 15000
     closing_time_ms: int = 15000
     opening_margin_ms: int = 2000
@@ -198,6 +201,10 @@ class GateConfig:
             and self.closed_limit is None
         ):
             raise GateConfigError(CONF_CLOSED_LIMIT, "asymmetric_closed_limit_required")
+        if self.limit_topology is LimitTopology.SINGLE_MAGNET and (
+            self.open_limit is None or self.closed_limit is None
+        ):
+            raise GateConfigError(CONF_LIMIT_TOPOLOGY, "single_magnet_requires_limits")
 
     def _validate_timings(self) -> None:
         """Validate travel, pulse, margin, debounce, and interval values."""
@@ -341,6 +348,7 @@ class GateConfig:
             CONF_DIRECTION_CHANGE_STRATEGY: self.direction_change_strategy.value,
             CONF_REPEATED_OPEN_POLICY: self.repeated_open_policy.value,
             CONF_REPEATED_CLOSE_POLICY: self.repeated_close_policy.value,
+            CONF_LIMIT_TOPOLOGY: self.limit_topology.value,
         }
         self._put_source(value, CONF_STEP_SOURCE, self.step_source)
         self._put_source(value, CONF_OPEN_SOURCE, self.open_source)
@@ -367,6 +375,9 @@ class GateConfig:
             open_limit=cls._limit_from(value, CONF_OPEN_LIMIT),
             closed_limit=cls._limit_from(value, CONF_CLOSED_LIMIT),
             obstacle_source=cls._optional_string(value, CONF_OBSTACLE_SOURCE),
+            limit_topology=LimitTopology(
+                value.get(CONF_LIMIT_TOPOLOGY, LimitTopology.INDEPENDENT.value)
+            ),
             opening_time_ms=int(value[CONF_OPENING_TIME_MS]),
             closing_time_ms=int(value[CONF_CLOSING_TIME_MS]),
             opening_margin_ms=int(value[CONF_OPENING_MARGIN_MS]),

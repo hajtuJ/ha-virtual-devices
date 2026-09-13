@@ -81,6 +81,7 @@ class GateController:
                 repeated_open_policy=config.repeated_open_policy,
                 repeated_close_policy=config.repeated_close_policy,
                 control_mode=config.control_mode,
+                limit_topology=config.limit_topology,
             )
         )
         interlocks: tuple[frozenset[SourceRef], ...] = ()
@@ -195,11 +196,19 @@ class GateController:
             self._apply_runtime_effects(transition.effects)
 
     async def async_handle_limit(
-        self, endpoint: GateEndpoint, *, raw_is_on: bool
+        self,
+        endpoint: GateEndpoint,
+        *,
+        raw_is_on: bool,
+        fresh_activation: bool = False,
     ) -> None:
         """Normalize one configured endpoint input and apply it passively."""
         await self.async_handle_event(
-            self._machine.limit_event(endpoint, raw_is_on=raw_is_on)
+            self._machine.limit_event(
+                endpoint,
+                raw_is_on=raw_is_on,
+                fresh_activation=fresh_activation,
+            )
         )
 
     def set_sensor_available(self, available: bool) -> None:
@@ -366,13 +375,9 @@ class GateController:
             self._raise_rejected(error)
 
     def _fixed_step_action_is_uncertain(self, action_started: bool) -> bool:
-        return (
-            action_started
-            and self.config.control_mode
-            in (
-                ControlMode.SYMMETRIC_SINGLE_STEP,
-                ControlMode.ASYMMETRIC_SINGLE_STEP,
-            )
+        return action_started and self.config.control_mode in (
+            ControlMode.SYMMETRIC_SINGLE_STEP,
+            ControlMode.ASYMMETRIC_SINGLE_STEP,
         )
 
     def _mark_execution_uncertain(

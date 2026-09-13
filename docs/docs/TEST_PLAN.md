@@ -101,6 +101,16 @@ CLOSED_LIMIT=ON
 -> LIMIT_SENSOR_CONFLICT
 ```
 
+Test both endpoint topologies:
+
+- `INDEPENDENT` retains the conflict;
+- `SINGLE_MAGNET` also conflicts at startup and on non-edge observations;
+- a later fresh, debounced activation edge selects that endpoint and clears the stale
+  opposite flag without executing a command;
+- a missing release message does not prevent reaching the opposite endpoint;
+- duplicate state publications and attribute-only changes do not select an endpoint;
+- cover both opening/closing and locally/externally initiated travel.
+
 ### External movement
 
 ```text

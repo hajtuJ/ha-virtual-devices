@@ -13,6 +13,7 @@ from custom_components.virtual_devices.gate import (
     GateConfig,
     GateConfigError,
     GateLimitConfig,
+    LimitTopology,
     RepeatedCommandPolicy,
     SourceRef,
     StopStrategyType,
@@ -47,6 +48,7 @@ def test_configuration_round_trip_is_json_safe_and_versioned() -> None:
         closing_time_ms=19000,
         direction_change_strategy=DirectionChangeStrategyType.MULTI_PULSE,
         repeated_open_policy=RepeatedCommandPolicy.REPEAT,
+        limit_topology=LimitTopology.SINGLE_MAGNET,
     )
 
     serialized = config.to_dict()
@@ -119,6 +121,19 @@ def test_asymmetric_single_step_requires_closed_limit_and_fixed_profile() -> Non
 
     with pytest.raises(GateConfigError, match="asymmetric_profile_is_fixed"):
         replace(config, repeated_open_policy=RepeatedCommandPolicy.REPEAT)
+
+
+def test_single_magnet_topology_requires_both_endpoint_sensors() -> None:
+    """A mutually exclusive pair is meaningful only with both endpoints."""
+    with pytest.raises(GateConfigError, match="single_magnet_requires_limits"):
+        single_step_config(limit_topology=LimitTopology.SINGLE_MAGNET)
+
+    config = single_step_config(
+        open_limit=GateLimitConfig("binary_sensor.gate_open"),
+        closed_limit=GateLimitConfig("binary_sensor.gate_closed"),
+        limit_topology=LimitTopology.SINGLE_MAGNET,
+    )
+    assert GateConfig.from_dict(config.to_dict()) == config
 
 
 def test_symmetric_single_step_has_fixed_profile_and_optional_limits() -> None:

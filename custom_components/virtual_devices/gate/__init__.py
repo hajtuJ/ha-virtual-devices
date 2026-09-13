@@ -29,6 +29,7 @@ from .models import (
     GateSnapshot,
     GateState,
     GateTransition,
+    LimitTopology,
     RepeatedCommandPolicy,
     StopStrategyType,
 )
@@ -72,6 +73,7 @@ __all__ = [
     "GateStateMachineConfig",
     "GateTransition",
     "LimitSensorConfig",
+    "LimitTopology",
     "RepeatedCommandPolicy",
     "SourceActions",
     "SourceRef",

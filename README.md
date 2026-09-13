@@ -71,9 +71,19 @@ endpoint has its own:
 - active-state polarity (normal or inverted);
 - debounce duration.
 
+The endpoint topology is configured explicitly. **Independent** sensors retain both
+reported levels and fault when both are active. **Single magnet** is available only
+with both endpoints and declares that the contacts are physically mutually
+exclusive. After debounce, a real inactive-to-active edge from either endpoint then
+establishes that endpoint and supersedes a stale opposite reading, so a lost release
+message does not prevent arrival confirmation. Duplicate state publications and
+attribute-only updates do not count as edges.
+
 Physical endpoints outrank estimates and restored history. If both endpoints are
-active, the gate reports `LIMIT_SENSOR_CONFLICT` and blocks movement. It never moves
-automatically to resolve a conflict.
+active at startup, or in independent topology, the gate reports
+`LIMIT_SENSOR_CONFLICT` and blocks movement. It never moves automatically to resolve
+a conflict. A single-magnet startup conflict is retained until a later fresh endpoint
+edge establishes authority.
 
 An optional obstacle sensor blocks CLOSE while active. Software obstacle handling is
 diagnostic convenience, not a replacement for certified photocells, edge sensors,

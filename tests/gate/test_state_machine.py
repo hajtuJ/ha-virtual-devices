@@ -17,6 +17,7 @@ from custom_components.virtual_devices.gate import (
     GateStateMachineConfig,
     GateTransition,
     LimitSensorConfig,
+    LimitTopology,
     RepeatedCommandPolicy,
     StopStrategyType,
 )
@@ -627,6 +628,89 @@ def test_limit_conflict_blocks_commands_and_resolves_to_remaining_endpoint() -> 
     assert resolved.snapshot.state is GateState.CLOSED
     assert resolved.snapshot.estimated_position == 0
     assert resolved.snapshot.problem is GateProblem.NONE
+
+
+@pytest.mark.parametrize(
+    ("initial", "event_type", "expected_state", "expected_position"),
+    [
+        (
+            GateSnapshot(
+                state=GateState.OPEN,
+                estimated_position=100,
+                open_limit_active=True,
+            ),
+            GateEventType.CLOSED_LIMIT_ON,
+            GateState.CLOSED,
+            0,
+        ),
+        (
+            GateSnapshot(
+                state=GateState.CLOSED,
+                estimated_position=0,
+                closed_limit_active=True,
+            ),
+            GateEventType.OPEN_LIMIT_ON,
+            GateState.OPEN,
+            100,
+        ),
+    ],
+)
+def test_fresh_single_magnet_endpoint_supersedes_opposite_cached_limit(
+    initial: GateSnapshot,
+    event_type: GateEventType,
+    expected_state: GateState,
+    expected_position: int,
+) -> None:
+    """A fresh edge from the exclusive magnet establishes the sole endpoint."""
+    machine = GateStateMachine(
+        GateStateMachineConfig(
+            open_limit=LimitSensorConfig(),
+            closed_limit=LimitSensorConfig(),
+            limit_topology=LimitTopology.SINGLE_MAGNET,
+        )
+    )
+
+    result = machine.transition(
+        initial,
+        GateEvent(event_type, fresh_activation=True),
+    )
+
+    assert result.snapshot.state is expected_state
+    assert result.snapshot.estimated_position == expected_position
+    assert result.snapshot.open_limit_active is (expected_state is GateState.OPEN)
+    assert result.snapshot.closed_limit_active is (expected_state is GateState.CLOSED)
+    assert result.snapshot.problem is GateProblem.NONE
+    assert all(not effect.type.value.startswith("execute") for effect in result.effects)
+
+
+def test_non_fresh_single_magnet_activation_does_not_hide_conflict() -> None:
+    """Only a real edge may invalidate the opposite cached observation."""
+    machine = GateStateMachine(
+        GateStateMachineConfig(
+            open_limit=LimitSensorConfig(),
+            closed_limit=LimitSensorConfig(),
+            limit_topology=LimitTopology.SINGLE_MAGNET,
+        )
+    )
+    initial = GateSnapshot(
+        state=GateState.OPEN,
+        estimated_position=100,
+        open_limit_active=True,
+    )
+
+    result = machine.transition(initial, GateEvent(GateEventType.CLOSED_LIMIT_ON))
+
+    assert result.snapshot.state is GateState.ERROR
+    assert result.snapshot.problem is GateProblem.LIMIT_SENSOR_CONFLICT
+
+
+def test_single_magnet_state_machine_requires_both_limits() -> None:
+    """The pure domain boundary rejects an incomplete exclusive topology."""
+    with pytest.raises(ValueError, match="requires both endpoint sensors"):
+        GateStateMachineConfig(
+            open_limit=LimitSensorConfig(),
+            limit_topology=LimitTopology.SINGLE_MAGNET,
+        )
 
 
 @pytest.mark.parametrize(

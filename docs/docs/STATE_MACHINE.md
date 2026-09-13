@@ -234,6 +234,11 @@ OPEN_LIMIT_ON
 
 unless both are active.
 
+With explicitly configured `SINGLE_MAGNET` topology, a debounced semantic
+inactive-to-active edge is fresh physical evidence and atomically replaces the
+opposite cached endpoint flag. Repeated publications of an unchanged state are not
+edges. Initial observations do not use this exception.
+
 ## 10. Conflict
 
 ```text
@@ -253,6 +258,10 @@ block motion commands
 ```
 
 No automatic movement is allowed.
+
+For `SINGLE_MAGNET`, startup with both inputs active still conflicts. A subsequent
+fresh endpoint activation resolves the conflict to that endpoint without a physical
+command. `INDEPENDENT` topology always retains the normal conflict behavior.
 
 ## 11. Position estimation
 
@@ -346,3 +355,6 @@ Verify the current Home Assistant `CoverEntity` behavior before final implementa
 11. cancellation of pulse/HOLD must deactivate source control.
 12. asymmetric STOP is exposed only while OPENING.
 13. a partially attempted asymmetric sequence must not commit its target direction.
+14. single-magnet supersession requires both configured endpoints and a fresh,
+    debounced activation edge.
+15. startup never selects a winner between two active endpoint observations.

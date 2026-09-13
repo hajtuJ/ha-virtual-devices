@@ -21,6 +21,7 @@ from .const import (
     CONF_DIRECTION_CHANGE_DELAY_MS,
     CONF_DIRECTION_CHANGE_STRATEGY,
     CONF_HOLD_DURATION_MS,
+    CONF_LIMIT_TOPOLOGY,
     CONF_MINIMUM_COMMAND_INTERVAL_MS,
     CONF_OBSTACLE_SOURCE,
     CONF_OPEN_LIMIT,
@@ -46,6 +47,7 @@ from .gate import (
     GateConfig,
     GateConfigError,
     GateLimitConfig,
+    LimitTopology,
     RepeatedCommandPolicy,
     SourceRef,
     StopStrategyType,
@@ -104,6 +106,9 @@ def _select(values: list[str], translation_key: str) -> selector.SelectSelector:
 
 
 LIMIT_ACTIVE_STATE_SELECTOR = _select([STATE_ON, STATE_OFF], "limit_active_state")
+LIMIT_TOPOLOGY_SELECTOR = _select(
+    [topology.value for topology in LimitTopology], "limit_topology"
+)
 
 
 def _limit_active_state_value(value: Any) -> str:
@@ -117,7 +122,7 @@ class VirtualDevicesConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Configure one independently managed virtual gate per config entry."""
 
     VERSION = 1
-    MINOR_VERSION = 2
+    MINOR_VERSION = 3
 
     _data: dict[str, Any]
     _device_id: str | None = None
@@ -219,6 +224,12 @@ class VirtualDevicesConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             ]
             if len(sensor_ids) != len(set(sensor_ids)):
                 errors["base"] = "duplicate_sensor"
+            elif normalized.get(
+                CONF_LIMIT_TOPOLOGY, LimitTopology.INDEPENDENT.value
+            ) == LimitTopology.SINGLE_MAGNET.value and (
+                CONF_OPEN_LIMIT not in normalized or CONF_CLOSED_LIMIT not in normalized
+            ):
+                errors["base"] = "single_magnet_requires_limits"
             else:
                 for key in (
                     CONF_OPEN_LIMIT,
@@ -227,6 +238,7 @@ class VirtualDevicesConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     CONF_CLOSED_LIMIT,
                     CONF_CLOSED_LIMIT_ACTIVE_STATE,
                     CONF_CLOSED_LIMIT_DEBOUNCE_MS,
+                    CONF_LIMIT_TOPOLOGY,
                     CONF_OBSTACLE_SOURCE,
                 ):
                     self._data.pop(key, None)
@@ -269,6 +281,13 @@ class VirtualDevicesConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                             CONF_CLOSED_LIMIT_DEBOUNCE_MS, DEFAULT_DEBOUNCE_MS
                         ),
                     ): _number_selector(minimum=0, maximum=60000),
+                    vol.Required(
+                        CONF_LIMIT_TOPOLOGY,
+                        default=self._data.get(
+                            CONF_LIMIT_TOPOLOGY,
+                            LimitTopology.INDEPENDENT.value,
+                        ),
+                    ): LIMIT_TOPOLOGY_SELECTOR,
                     self._optional_marker(CONF_OBSTACLE_SOURCE): BINARY_SENSOR_SELECTOR,
                 }
             ),
@@ -532,6 +551,9 @@ class VirtualDevicesConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             obstacle_source=str(data[CONF_OBSTACLE_SOURCE])
             if CONF_OBSTACLE_SOURCE in data
             else None,
+            limit_topology=LimitTopology(
+                data.get(CONF_LIMIT_TOPOLOGY, LimitTopology.INDEPENDENT.value)
+            ),
             opening_time_ms=int(data[CONF_OPENING_TIME_MS]),
             closing_time_ms=int(data[CONF_CLOSING_TIME_MS]),
             opening_margin_ms=int(data[CONF_OPENING_MARGIN_MS]),
@@ -639,6 +661,7 @@ class VirtualDevicesConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             CONF_DIRECTION_CHANGE_STRATEGY: config.direction_change_strategy.value,
             CONF_REPEATED_OPEN_POLICY: config.repeated_open_policy.value,
             CONF_REPEATED_CLOSE_POLICY: config.repeated_close_policy.value,
+            CONF_LIMIT_TOPOLOGY: config.limit_topology.value,
         }
         for key, source in (
             (CONF_STEP_SOURCE, config.step_source),

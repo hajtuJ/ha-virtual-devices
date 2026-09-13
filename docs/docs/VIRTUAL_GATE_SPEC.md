@@ -241,6 +241,21 @@ active_state
 debounce_ms
 ```
 
+Endpoint topology is explicit:
+
+```text
+INDEPENDENT
+SINGLE_MAGNET
+```
+
+`INDEPENDENT` is the default and retains both sensor levels independently.
+`SINGLE_MAGNET` requires both endpoint sensors and declares that one physical magnet
+makes simultaneous contact closure impossible. After debounce, only a real semantic
+inactive-to-active edge may establish the newly reached endpoint and supersede a
+stale opposite reading. Duplicate state publications, attribute-only updates, and
+recovery from unavailable without an inactive-to-active edge must not supersede the
+opposite endpoint.
+
 The Config/Reconfigure Flow presents `active_state` as an explicit `ON` / `OFF`
 choice. It means the Home Assistant binary-sensor state reported when that limit
 contact is closed and its endpoint has been reached. OPEN and CLOSED limits are
@@ -490,7 +505,7 @@ open_limit = active
 closed_limit = active
 ```
 
-then:
+then `INDEPENDENT` topology, startup/restore, and non-edge observations result in:
 
 ```text
 problem = LIMIT_SENSOR_CONFLICT
@@ -503,6 +518,12 @@ block movement commands
 ```
 
 until the conflict disappears.
+
+In `SINGLE_MAGNET` topology, a later fresh activation edge from either endpoint is
+authoritative: it sets that endpoint active, clears the stale opposite endpoint,
+calibrates position, and clears the conflict. This is passive reconciliation and
+must never execute a source action. If both endpoints appear active during startup,
+the conflict remains because there is no trustworthy fresh ordering evidence.
 
 Do not auto-move the gate to resolve it.
 

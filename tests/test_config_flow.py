@@ -17,6 +17,7 @@ from custom_components.virtual_devices.const import (
     CONF_CONTROL_MODE,
     CONF_DIRECTION_CHANGE_STRATEGY,
     CONF_HOLD_DURATION_MS,
+    CONF_LIMIT_TOPOLOGY,
     CONF_MINIMUM_COMMAND_INTERVAL_MS,
     CONF_OPEN_LIMIT,
     CONF_OPEN_LIMIT_ACTIVE_STATE,
@@ -37,6 +38,7 @@ from custom_components.virtual_devices.gate import (
     ControlMode,
     DirectionChangeStrategyType,
     GateConfig,
+    LimitTopology,
     SourceRef,
     StopStrategyType,
 )
@@ -186,6 +188,18 @@ async def test_limit_form_explicitly_selects_reached_state(
     defaults = schema({CONF_CLOSED_LIMIT: "binary_sensor.explicit_closed"})
     assert defaults[CONF_OPEN_LIMIT_ACTIVE_STATE] == STATE_ON
     assert defaults[CONF_CLOSED_LIMIT_ACTIVE_STATE] == STATE_ON
+    assert defaults[CONF_LIMIT_TOPOLOGY] == LimitTopology.INDEPENDENT.value
+    topology_selector = next(
+        field
+        for marker, field in schema.schema.items()
+        if marker.schema == CONF_LIMIT_TOPOLOGY
+    )
+    assert isinstance(topology_selector, selector.SelectSelector)
+    assert topology_selector.config["options"] == [
+        LimitTopology.INDEPENDENT.value,
+        LimitTopology.SINGLE_MAGNET.value,
+    ]
+    assert topology_selector.config["translation_key"] == "limit_topology"
 
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
@@ -196,6 +210,7 @@ async def test_limit_form_explicitly_selects_reached_state(
             CONF_OPEN_LIMIT: "binary_sensor.explicit_open",
             CONF_OPEN_LIMIT_ACTIVE_STATE: STATE_ON,
             CONF_OPEN_LIMIT_DEBOUNCE_MS: 0,
+            CONF_LIMIT_TOPOLOGY: LimitTopology.SINGLE_MAGNET.value,
         },
     )
     result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
@@ -207,6 +222,33 @@ async def test_limit_form_explicitly_selects_reached_state(
     assert not config.closed_limit.active_state
     assert config.open_limit is not None
     assert config.open_limit.active_state
+    assert config.limit_topology is LimitTopology.SINGLE_MAGNET
+
+
+async def test_single_magnet_flow_requires_both_limits(hass: HomeAssistant) -> None:
+    """The UI rejects an exclusive topology without a complete endpoint pair."""
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": config_entries.SOURCE_USER},
+        data={
+            CONF_NAME: "Single magnet gate",
+            CONF_CONTROL_MODE: ControlMode.SINGLE_STEP.value,
+        },
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_STEP_SOURCE: "button.single_magnet_gate"}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_CLOSED_LIMIT: "binary_sensor.single_magnet_closed",
+            CONF_LIMIT_TOPOLOGY: LimitTopology.SINGLE_MAGNET.value,
+        },
+    )
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "limits"
+    assert result["errors"] == {"base": "single_magnet_requires_limits"}
 
 
 async def test_two_distinct_gates_have_independent_stable_identity(
@@ -462,13 +504,19 @@ async def test_reconfigure_preserves_identity_reloads_and_replaces_listeners(
     hass.states.async_set("button.new_gate", "off")
     hass.states.async_set("binary_sensor.old_closed", "on")
     hass.states.async_set("binary_sensor.new_closed", "on")
+    hass.states.async_set("binary_sensor.old_open", "on")
+    hass.states.async_set("binary_sensor.new_open", "on")
     created = await create_gate(
         hass,
         controls={CONF_STEP_SOURCE: "button.old_gate"},
         limits={
+            CONF_OPEN_LIMIT: "binary_sensor.old_open",
+            CONF_OPEN_LIMIT_ACTIVE_STATE: STATE_OFF,
+            CONF_OPEN_LIMIT_DEBOUNCE_MS: 0,
             CONF_CLOSED_LIMIT: "binary_sensor.old_closed",
             CONF_CLOSED_LIMIT_ACTIVE_STATE: STATE_OFF,
             CONF_CLOSED_LIMIT_DEBOUNCE_MS: 0,
+            CONF_LIMIT_TOPOLOGY: LimitTopology.SINGLE_MAGNET.value,
         },
     )
     entry = created["result"]
@@ -509,14 +557,20 @@ async def test_reconfigure_preserves_identity_reloads_and_replaces_listeners(
     assert limits_schema is not None
     limits_defaults = limits_schema(
         {
+            CONF_OPEN_LIMIT: "binary_sensor.new_open",
+            CONF_OPEN_LIMIT_DEBOUNCE_MS: 0,
             CONF_CLOSED_LIMIT: "binary_sensor.new_closed",
             CONF_CLOSED_LIMIT_DEBOUNCE_MS: 0,
         }
     )
     assert limits_defaults[CONF_CLOSED_LIMIT_ACTIVE_STATE] == STATE_OFF
+    assert limits_defaults[CONF_OPEN_LIMIT_ACTIVE_STATE] == STATE_OFF
+    assert limits_defaults[CONF_LIMIT_TOPOLOGY] == LimitTopology.SINGLE_MAGNET.value
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
         {
+            CONF_OPEN_LIMIT: "binary_sensor.new_open",
+            CONF_OPEN_LIMIT_DEBOUNCE_MS: 0,
             CONF_CLOSED_LIMIT: "binary_sensor.new_closed",
             CONF_CLOSED_LIMIT_DEBOUNCE_MS: 0,
         },
@@ -533,6 +587,9 @@ async def test_reconfigure_preserves_identity_reloads_and_replaces_listeners(
     assert updated.device_id == original.device_id
     assert updated.closed_limit is not None
     assert not updated.closed_limit.active_state
+    assert updated.open_limit is not None
+    assert not updated.open_limit.active_state
+    assert updated.limit_topology is LimitTopology.SINGLE_MAGNET
     assert entry.unique_id == original.device_id
     assert entry.title == "Renamed Gate"
     updated_cover = entity_registry.async_get("cover.driveway_gate")
@@ -570,11 +627,13 @@ async def test_minor_version_migration_normalizes_without_movement(
         control_mode=ControlMode.SINGLE_STEP,
         step_source=SourceRef("button.migration_gate", ControlActionType.BUTTON),
     )
+    legacy_data = config.to_dict()
+    legacy_data.pop(CONF_LIMIT_TOPOLOGY)
     entry = MockConfigEntry(
         domain=DOMAIN,
         title=config.name,
         unique_id=config.device_id,
-        data=config.to_dict(),
+        data=legacy_data,
         version=1,
         minor_version=1,
     )
@@ -582,6 +641,7 @@ async def test_minor_version_migration_normalizes_without_movement(
 
     assert await async_migrate_entry(hass, entry)
     assert entry.version == 1
-    assert entry.minor_version == 2
+    assert entry.minor_version == 3
     assert GateConfig.from_dict(dict(entry.data)) == config
+    assert entry.data[CONF_LIMIT_TOPOLOGY] == LimitTopology.INDEPENDENT.value
     assert calls == []

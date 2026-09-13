@@ -289,6 +289,9 @@ Rules:
 
 1. HA restart must never cause gate movement.
 2. Conflicting limit sensors must never trigger automatic corrective movement.
+   Independent sensors and ambiguous startup observations remain conflicts. An
+   explicitly configured single-magnet pair may passively replace a stale opposite
+   observation only after a fresh, debounced endpoint activation edge.
 3. Timeout with a configured limit sensor must be reported as a fault.
 4. Command cancellation must not leave relays active.
 5. Physical safety devices must not be bypassed.
