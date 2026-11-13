@@ -559,6 +559,77 @@ def test_timeout_never_fakes_a_configured_endpoint(
 
 
 @pytest.mark.parametrize(
+    ("movement", "open_active", "closed_active", "expected_state", "problem"),
+    [
+        # Origin limit still the only active one: the pulse never moved the gate.
+        (GateState.CLOSING, True, False, GateState.OPEN, GateProblem.CLOSING_TIMEOUT),
+        (GateState.OPENING, False, True, GateState.CLOSED, GateProblem.OPENING_TIMEOUT),
+        # Gate left its origin, or the sensors disagree: no endpoint is proven.
+        (GateState.CLOSING, False, False, GateState.ERROR, GateProblem.CLOSING_TIMEOUT),
+        (GateState.OPENING, False, False, GateState.ERROR, GateProblem.OPENING_TIMEOUT),
+        (GateState.CLOSING, True, True, GateState.ERROR, GateProblem.CLOSING_TIMEOUT),
+        (GateState.OPENING, True, True, GateState.ERROR, GateProblem.OPENING_TIMEOUT),
+    ],
+)
+def test_timeout_keeps_origin_endpoint_proven_by_its_sensor(
+    movement: GateState,
+    open_active: bool,
+    closed_active: bool,
+    expected_state: GateState,
+    problem: GateProblem,
+) -> None:
+    """A lost pulse reports the timeout but stays at the sensed endpoint."""
+    direction = (
+        GateDirection.OPENING
+        if movement is GateState.OPENING
+        else GateDirection.CLOSING
+    )
+    moving = GateSnapshot(
+        state=movement,
+        current_direction=direction,
+        last_direction=direction,
+        open_limit_active=open_active,
+        closed_limit_active=closed_active,
+    )
+    result = asymmetric_machine(open_limit=True).transition(
+        moving, GateEvent(GateEventType.MOVEMENT_TIMEOUT)
+    )
+
+    assert result.snapshot.state is expected_state
+    assert result.snapshot.problem is problem
+    assert GateEffectType.CANCEL_MOVEMENT_TIMER in effect_types(result)
+    if expected_state is GateState.OPEN:
+        assert result.snapshot.estimated_position == 100
+        assert result.snapshot.last_direction is GateDirection.OPENING
+    if expected_state is GateState.CLOSED:
+        assert result.snapshot.estimated_position == 0
+        assert result.snapshot.last_direction is GateDirection.CLOSING
+
+
+def test_close_is_accepted_again_after_lost_close_pulse() -> None:
+    """Regression: a lost CLOSE pulse must not lock out the next HA command."""
+    machine = asymmetric_machine(open_limit=True)
+    closing = GateSnapshot(
+        state=GateState.CLOSING,
+        current_direction=GateDirection.CLOSING,
+        last_direction=GateDirection.CLOSING,
+        estimated_position=100,
+        open_limit_active=True,
+    )
+    timed_out = machine.transition(
+        closing, GateEvent(GateEventType.MOVEMENT_TIMEOUT)
+    ).snapshot
+    assert timed_out.state is GateState.OPEN
+
+    retry = machine.transition(timed_out, GateEvent(GateEventType.COMMAND_CLOSE))
+
+    assert retry.snapshot.state is GateState.CLOSING
+    assert retry.snapshot.problem is GateProblem.NONE
+    assert retry.effects[0].type is GateEffectType.EXECUTE_STEP_PULSES
+    assert retry.effects[0].pulse_count == 1
+
+
+@pytest.mark.parametrize(
     ("with_open_limit", "movement", "expected_state", "expected_problem"),
     [
         (False, GateState.OPENING, GateState.OPEN, GateProblem.NONE),

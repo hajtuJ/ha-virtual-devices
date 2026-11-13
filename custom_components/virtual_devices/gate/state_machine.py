@@ -580,6 +580,13 @@ class GateStateMachine:
 
     def _timeout(self, snapshot: GateSnapshot) -> GateTransition:
         """Resolve travel timeout according to endpoint sensor authority."""
+        held = self._timeout_at_origin_endpoint(snapshot)
+        if held is not None:
+            return self._result(
+                snapshot,
+                held,
+                (GateEffect(GateEffectType.CANCEL_MOVEMENT_TIMER),),
+            )
         if snapshot.state is GateState.OPENING:
             if self._config.open_limit is not None:
                 timed_out = replace(
@@ -704,6 +711,37 @@ class GateStateMachine:
         if snapshot.state in (GateState.OPENING, GateState.CLOSING):
             return (GateEffect(GateEffectType.CANCEL_MOVEMENT_TIMER),)
         return ()
+
+    @staticmethod
+    def _timeout_at_origin_endpoint(snapshot: GateSnapshot) -> GateSnapshot | None:
+        """Keep the physically confirmed origin endpoint when travel never began.
+
+        A pulse lost or shortened on its way to the relay leaves the gate where it
+        was. If the origin limit is still the only active one at timeout, that
+        sensor proves the endpoint, so report the timeout without dropping into
+        ERROR, which would block every further fixed-step command.
+        """
+        if snapshot.open_limit_active == snapshot.closed_limit_active:
+            return None
+        if snapshot.state is GateState.CLOSING and snapshot.open_limit_active:
+            return replace(
+                snapshot,
+                state=GateState.OPEN,
+                current_direction=GateDirection.UNKNOWN,
+                last_direction=GateDirection.OPENING,
+                estimated_position=100,
+                problem=GateProblem.CLOSING_TIMEOUT,
+            )
+        if snapshot.state is GateState.OPENING and snapshot.closed_limit_active:
+            return replace(
+                snapshot,
+                state=GateState.CLOSED,
+                current_direction=GateDirection.UNKNOWN,
+                last_direction=GateDirection.CLOSING,
+                estimated_position=0,
+                problem=GateProblem.OPENING_TIMEOUT,
+            )
+        return None
 
     @staticmethod
     def _ambient_problem(snapshot: GateSnapshot) -> GateProblem:

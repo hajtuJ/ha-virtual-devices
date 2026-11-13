@@ -26,6 +26,13 @@ All notable changes to Virtual Devices are documented here. The project follows
 - English and Polish UI translations.
 - Typed domain/state-machine/controller layers and comprehensive HA/safety tests.
 
+### Fixed
+
+- An endpoint timeout no longer drops the gate into ERROR when the origin endpoint
+  limit is still the only active limit (the command never moved the gate). The
+  gate keeps the sensed OPEN/CLOSED state, reports the timeout problem, and accepts
+  the next command instead of rejecting it as `asymmetric_state_unknown`.
+
 ### Safety
 
 - Setup, unload, reload, restore, migration, and reconfigure issue no physical

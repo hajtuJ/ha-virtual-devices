@@ -482,6 +482,7 @@ available. Do not replace failed results; add a later passing entry.
 | 2026-09-13 | 3–10 | `.venv/bin/pytest -q` | PASS | All 193 tests passed, including single-magnet missing-release recovery, both endpoint directions, startup conflict recovery, debounce, duplicate-state filtering, Config/Reconfigure Flow, migration, and diagnostics. |
 | 2026-09-13 | 1–10 | Ruff, format check, strict mypy, and compileall | PASS | All 34 project Python files pass lint, formatting, typing, and bytecode compilation. |
 | 2026-09-13 | 2, 6, 9 | `docker run --rm -v "$PWD:/github/workspace" ghcr.io/home-assistant/hassfest:latest` | PASS | One integration, zero invalid integrations; JSON, Config Flow, and synchronized translations validated. |
+| 2026-11-13 | 3 | `.venv/bin/pytest -q`, Ruff, format check, strict mypy | PASS | All 200 tests passed, including the origin-endpoint timeout matrix and the lost-CLOSE-pulse regression (gate stays OPEN with CLOSING_TIMEOUT and accepts the next CLOSE). |
 
 ## Progress change log
 
@@ -501,3 +502,4 @@ available. Do not replace failed results; add a later passing entry.
 | 2026-09-07 | Added and verified the extended asymmetric step-by-step controller profile; release-gate count is unchanged. | 99 / 104 (95%) |
 | 2026-09-07 | Replaced ambiguous limit-state toggles with explicit translated ON/OFF endpoint-reached selectors; release-gate count is unchanged. | 99 / 104 (95%) |
 | 2026-09-13 | Recorded successful public HACS validation and added the verified single-magnet endpoint topology; completed two validation gates. | 101 / 104 (97%) |
+| 2026-11-13 | Endpoint timeout keeps the sensed origin endpoint instead of ERROR after a lost pulse (field issue on a Zigbee relay); release-gate count is unchanged. | 101 / 104 (97%) |
