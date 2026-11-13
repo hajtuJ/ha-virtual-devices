@@ -132,6 +132,19 @@ Timeout with OPEN limit configured:
 -> do not claim OPEN
 ```
 
+Timeout while the CLOSED limit is still the only active limit (the command never
+moved the gate, for example a pulse shortened or lost on the way to the relay):
+
+```text
+-> CLOSED
+-> position=0
+-> last_direction=CLOSING
+-> problem=OPENING_TIMEOUT
+```
+
+The physical CLOSED sensor proves the endpoint, so the gate stays commandable
+instead of entering ERROR.
+
 Timeout without OPEN limit:
 
 ```text
@@ -167,6 +180,15 @@ Timeout with CLOSED limit configured:
 ```text
 -> problem=CLOSING_TIMEOUT
 -> do not claim CLOSED
+```
+
+Timeout while the OPEN limit is still the only active limit:
+
+```text
+-> OPEN
+-> position=100
+-> last_direction=OPENING
+-> problem=CLOSING_TIMEOUT
 ```
 
 Timeout without CLOSED limit:

@@ -323,6 +323,12 @@ Do not mark the gate as OPEN/CLOSED solely from elapsed time when an endpoint li
 
 When no endpoint limit exists, elapsed time may determine the final state.
 
+Exception: if the origin endpoint limit is still the only active limit when the
+timeout expires, the gate never left that endpoint. Report the timeout problem but
+keep the sensed OPEN or CLOSED state, so a lost or shortened pulse does not lock the
+gate in ERROR and block further fixed-step commands. Both limits active remains
+`LIMIT_SENSOR_CONFLICT`.
+
 ## 13. Position estimation
 
 Optional estimate:
